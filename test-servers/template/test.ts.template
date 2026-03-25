@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+/**
+ * E2E tests for MY-SERVER
+ * Replace MY-SERVER with your server name
+ */
+
+import { MCPClient, TestFramework } from '../../framework/src/index.js';
+
+async function main() {
+  const framework = new TestFramework('my-server'); // Replace with your server name
+  const client = new MCPClient('http://localhost:8080');
+
+  try {
+    await framework.run(async (test) => {
+      // Test 1: Server reachability
+      await test('server is reachable and ready', async () => {
+        await client.waitForReady();
+      });
+
+      // Test 2: Connect to MCP server
+      await test('can connect to MCP server', async () => {
+        await client.connect();
+      });
+
+      // Test 3: List available tools
+      await test('lists available tools', async () => {
+        const tools = await client.listTools();
+        test.assert(tools.length > 0, 'Server should have at least one tool');
+
+        // Optional: Log available tools
+        console.log(`    Found ${tools.length} tools`);
+      });
+
+      // Add more tests specific to your server
+      // Example: Test specific tool
+      // await test('has expected tool', async () => {
+      //   const tools = await client.listTools();
+      //   const toolNames = tools.map(t => t.name);
+      //   test.assertContains(toolNames, 'my-expected-tool');
+      // });
+
+      // Example: Test calling a tool
+      // await test('can call specific tool', async () => {
+      //   const result = await client.callTool('my-tool', { arg: 'value' });
+      //   test.assert(result !== null, 'Tool should return a result');
+      // });
+
+      // Example: Test resources
+      // await test('can list resources', async () => {
+      //   const resources = await client.listResources();
+      //   console.log(`    Found ${resources.length} resources`);
+      // });
+
+      // Example: Test prompts
+      // await test('can list prompts', async () => {
+      //   const prompts = await client.listPrompts();
+      //   console.log(`    Found ${prompts.length} prompts`);
+      // });
+
+      // Cleanup: Disconnect from server
+      await client.disconnect();
+    });
+  } catch (error) {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  }
+
+  process.exit(framework.exitCode);
+}
+
+main();

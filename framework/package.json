@@ -1,0 +1,27 @@
+{
+  "name": "@mcp-e2e/framework",
+  "version": "1.0.0",
+  "description": "E2E testing framework for MCP servers",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "tsx"
+  },
+  "keywords": [
+    "mcp",
+    "testing",
+    "e2e",
+    "kubernetes"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

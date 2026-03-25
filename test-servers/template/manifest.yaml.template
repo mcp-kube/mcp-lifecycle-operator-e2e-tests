@@ -1,0 +1,29 @@
+---
+# Replace 'my-server' with your server name
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: my-server
+  namespace: default  # Change if needed
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: myregistry/my-mcp-server:v1.0.0  # Replace with your image
+  config:
+    port: 8080  # Replace with your server's port
+    # Optional: Add arguments
+    # arguments:
+    #   - --config
+    #   - /etc/config/config.yaml
+  # Optional: Add storage/ConfigMap
+  # storage:
+  #   - path: /etc/config
+  #     source:
+  #       type: ConfigMap
+  #       configMap:
+  #         name: my-server-config
+  # Optional: Add security settings
+  # runtime:
+  #   security:
+  #     serviceAccountName: my-service-account

@@ -1,0 +1,33 @@
+# MY-SERVER MCP Server
+
+E2E tests for MY-SERVER.
+
+Replace MY-SERVER with your server name.
+
+## What this server provides
+
+Describe what your MCP server does here.
+
+- **Tools**: List the tools your server provides
+- **Resources**: List the resources your server provides
+- **Prompts**: List the prompts your server provides (if any)
+
+## Test coverage
+
+List what your tests cover:
+- Server reachability
+- Tool listing
+- [Add your specific tests here]
+
+## Configuration
+
+Describe any special configuration needed for your server:
+- Environment variables
+- ConfigMaps
+- Secrets
+- Service accounts
+- etc.
+
+## Known issues
+
+List any known issues or limitations.
