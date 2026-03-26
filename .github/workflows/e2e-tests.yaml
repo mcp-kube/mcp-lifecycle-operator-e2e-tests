@@ -27,8 +27,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'framework/package-lock.json'
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
@@ -111,8 +109,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'framework/package-lock.json'
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
