@@ -1,5 +1,7 @@
 # MCP Server E2E Testing Framework
 
+[![E2E Tests](https://github.com/mcp-kube/mcp-lifecycle-operator-e2e-tests/actions/workflows/e2e-tests.yaml/badge.svg)](https://github.com/mcp-kube/mcp-lifecycle-operator-e2e-tests/actions/workflows/e2e-tests.yaml)
+
 Automated end-to-end testing framework for MCP (Model Context Protocol) server images deployed via the Kubernetes MCP lifecycle operator.
 
 ## Overview
@@ -344,7 +346,52 @@ KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 
 ## CI/CD Integration
 
-The framework is designed to work both locally and in CI environments. See `.github/workflows/e2e-tests.yaml` for GitHub Actions integration.
+The framework is designed to work both locally and in CI environments.
+
+### GitHub Actions
+
+The repository includes two GitHub Actions workflows:
+
+#### 1. E2E Tests ([`e2e-tests.yaml`](.github/workflows/e2e-tests.yaml))
+
+Runs the complete E2E test suite:
+- **Triggers**: Push to `main`, PRs, daily schedule (2 AM UTC), manual
+- **Duration**: ~2-3 minutes per run
+- **Jobs**:
+  - `e2e-tests`: Full test suite on every trigger
+  - `e2e-tests-operator-ref`: Matrix testing against multiple operator versions (scheduled/manual only)
+
+#### 2. Validation ([`validate.yaml`](.github/workflows/validate.yaml))
+
+Fast validation checks for PRs:
+- **Triggers**: Push to `main`, PRs
+- **Duration**: ~1 minute per run
+- **Jobs**:
+  - `validate-scripts`: Shellcheck, YAML validation
+  - `validate-framework`: TypeScript compilation, linting
+  - `validate-test-servers`: Test structure validation
+
+### CI Environment Detection
+
+The scripts automatically detect CI environments:
+- In CI (`CI=true`), clusters are deleted without prompting
+- Color output is disabled when `NO_COLOR=1`
+- GitHub Actions automatically sets these variables
+
+### Artifacts
+
+On test failure, logs are uploaded as artifacts (7 day retention):
+- `e2e-test-logs`: All test logs from `logs/` directory
+- Per-server logs and kubectl describe outputs
+
+### Manual Workflow Dispatch
+
+You can manually trigger tests from GitHub UI:
+1. Go to Actions → E2E Tests
+2. Click "Run workflow"
+3. Optionally specify operator ref
+
+See [`.github/workflows/README.md`](.github/workflows/README.md) for detailed workflow documentation.
 
 ## License
 
