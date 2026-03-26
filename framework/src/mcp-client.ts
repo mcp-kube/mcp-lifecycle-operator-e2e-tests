@@ -1,6 +1,6 @@
 /**
  * MCP Client wrapper for E2E testing
- * Wraps the official MCP SDK with convenient methods for testing
+ * Supports both SSE and plain HTTP transports
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -11,15 +11,18 @@ export interface MCPClientOptions {
   timeout?: number;
   maxRetries?: number;
   retryDelay?: number;
+  transport?: 'sse' | 'http';
 }
 
 export class MCPClient {
-  private client: Client;
-  private transport: SSEClientTransport;
+  private client?: Client;
+  private transport?: SSEClientTransport;
   private connected: boolean = false;
   private timeout: number;
   private maxRetries: number;
   private retryDelay: number;
+  private transportType: 'sse' | 'http';
+  private requestId: number = 0;
 
   constructor(
     private baseUrl: string,
@@ -28,17 +31,20 @@ export class MCPClient {
     this.timeout = options.timeout ?? 30000;
     this.maxRetries = options.maxRetries ?? 5;
     this.retryDelay = options.retryDelay ?? 2000;
+    this.transportType = options.transport ?? 'sse';
 
-    this.transport = new SSEClientTransport(new URL(`${baseUrl}/sse`));
-    this.client = new Client(
-      {
-        name: 'mcp-e2e-test-client',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {},
-      }
-    );
+    if (this.transportType === 'sse') {
+      this.transport = new SSEClientTransport(new URL(`${baseUrl}/sse`));
+      this.client = new Client(
+        {
+          name: 'mcp-e2e-test-client',
+          version: '1.0.0',
+        },
+        {
+          capabilities: {},
+        }
+      );
+    }
   }
 
   /**
@@ -48,7 +54,18 @@ export class MCPClient {
     if (this.connected) {
       return;
     }
-    await this.client.connect(this.transport);
+
+    if (this.transportType === 'sse') {
+      await this.client!.connect(this.transport!);
+    } else {
+      // HTTP transport - initialize
+      await this.httpRequest('initialize', {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'mcp-e2e-test-client', version: '1.0.0' },
+      });
+    }
+
     this.connected = true;
   }
 
@@ -59,7 +76,11 @@ export class MCPClient {
     if (!this.connected) {
       return;
     }
-    await this.client.close();
+
+    if (this.transportType === 'sse' && this.client) {
+      await this.client.close();
+    }
+
     this.connected = false;
   }
 
@@ -100,8 +121,14 @@ export class MCPClient {
    */
   async listTools(): Promise<Tool[]> {
     this.ensureConnected();
-    const response = await this.client.listTools();
-    return response.tools as Tool[];
+
+    if (this.transportType === 'sse') {
+      const response = await this.client!.listTools();
+      return response.tools as Tool[];
+    } else {
+      const response = await this.httpRequest('tools/list', {});
+      return response.tools as Tool[];
+    }
   }
 
   /**
@@ -109,11 +136,15 @@ export class MCPClient {
    */
   async callTool(name: string, args: any = {}): Promise<any> {
     this.ensureConnected();
-    const response = await this.client.callTool({
-      name,
-      arguments: args,
-    });
-    return response;
+
+    if (this.transportType === 'sse') {
+      return await this.client!.callTool({
+        name,
+        arguments: args,
+      });
+    } else {
+      return await this.httpRequest('tools/call', { name, arguments: args });
+    }
   }
 
   /**
@@ -153,6 +184,28 @@ export class MCPClient {
       arguments: args,
     });
     return response;
+  }
+
+  /**
+   * Make an HTTP request to the MCP server (for HTTP transport)
+   */
+  private async httpRequest(method: string, params: any): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: ++this.requestId,
+        method,
+        params,
+      }),
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(`MCP error ${data.error.code}: ${data.error.message}`);
+    }
+    return data.result;
   }
 
   private ensureConnected(): void {

@@ -2,75 +2,27 @@
 /**
  * E2E tests for MCP Lifecycle Operator Features
  *
- * Uses a simple HTTP client instead of the SSE-based MCP client
+ * This test validates that the operator correctly configures:
+ * - Secrets mounted as volumes
+ * - ConfigMaps mounted as volumes
+ * - Security context settings
+ * - Environment variables
+ * - Resource limits
  */
 
-import { TestFramework } from '../../framework/src/index.js';
-
-// Simple HTTP-based MCP client
-class SimpleHTTPClient {
-  private baseUrl: string;
-  private requestId: number = 0;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-  }
-
-  async initialize() {
-    return await this.request('initialize', {
-      protocolVersion: '2025-11-25',
-      capabilities: {},
-      clientInfo: { name: 'test-client', version: '1.0.0' },
-    });
-  }
-
-  async listTools() {
-    const result = await this.request('tools/list', {});
-    return result.tools;
-  }
-
-  async callTool(name: string, args: any) {
-    return await this.request('tools/call', { name, arguments: args });
-  }
-
-  private async request(method: string, params: any) {
-    const response = await fetch(`${this.baseUrl}/mcp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: ++this.requestId,
-        method,
-        params,
-      }),
-    });
-
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(`MCP error: ${data.error.message}`);
-    }
-    return data.result;
-  }
-}
+import { MCPClient, TestFramework, runCommonTests } from '../../framework/src/index.js';
 
 async function main() {
   const framework = new TestFramework('operator-features');
-  const client = new SimpleHTTPClient('http://localhost:8080');
+  // Use HTTP transport for this server
+  const client = new MCPClient('http://localhost:8080', { transport: 'http' });
 
   try {
     await framework.run(async (test) => {
-      // Initialize
-      await test('can initialize connection', async () => {
-        const result = await client.initialize();
-        test.assert(result.serverInfo.name === 'operator-features-validator', 'Server name should match');
-      });
+      // Run common baseline tests
+      await runCommonTests(test, client);
 
-      // List tools
-      await test('can list tools', async () => {
-        const tools = await client.listTools();
-        test.assert(tools.length > 0, 'Should have at least one tool');
-        console.log(`    Found ${tools.length} tools`);
-      });
+      // ===== Operator Feature Tests =====
 
       // Test: Verify secret files are mounted
       await test('secret is mounted at /secrets', async () => {
@@ -138,6 +90,9 @@ async function main() {
         test.assert(data.exists, '/secrets should exist');
         test.assertEqual(data.permissions.gid, 2000, 'fsGroup should be 2000');
       });
+
+      // Cleanup: Disconnect from server
+      await client.disconnect();
     });
   } catch (error) {
     console.error('Fatal error:', error);
