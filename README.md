@@ -47,7 +47,7 @@ npm install
 This will:
 1. Create a Kind cluster
 2. Build and deploy the MCP lifecycle operator from source
-3. Build and load any custom MCP server images (from test-servers/*/server/ directories)
+3. Build and load any custom MCP server images (from `test-servers/*/server/` directories)
 4. Test each MCP server in the `test-servers/` directory sequentially
 5. Collect logs and display results
 6. Clean up the cluster
@@ -66,6 +66,11 @@ This will:
 OPERATOR_REF=main ./scripts/run-e2e.sh
 ```
 
+**Test with operator from a fork:**
+```bash
+OPERATOR_REPO=https://github.com/username/mcp-lifecycle-operator OPERATOR_REF=feature-branch ./scripts/run-e2e.sh
+```
+
 **Keep cluster after tests for debugging:**
 ```bash
 KEEP_CLUSTER=true ./scripts/run-e2e.sh
@@ -81,6 +86,11 @@ KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 **Setup cluster only:**
 ```bash
 ./cluster/setup.sh
+```
+
+**Build and load custom test server images:**
+```bash
+./scripts/build-test-images.sh
 ```
 
 **Deploy operator only:**
@@ -104,6 +114,7 @@ All configuration is done via environment variables:
 
 ### Operator Configuration
 - `OPERATOR_REF` - Git ref to build operator from (default: `main`)
+- `OPERATOR_REPO` - Git repository URL for operator (default: `https://github.com/kubernetes-sigs/mcp-lifecycle-operator`)
 - `OPERATOR_IMAGE` - Docker image name for operator (default: `mcp-operator:test`)
 
 ### Cluster Configuration
@@ -122,6 +133,9 @@ All configuration is done via environment variables:
 # Test with operator built from specific branch
 OPERATOR_REF=feature/new-feature ./scripts/run-e2e.sh
 
+# Test with operator from a fork
+OPERATOR_REPO=https://github.com/username/mcp-lifecycle-operator OPERATOR_REF=main ./scripts/run-e2e.sh
+
 # Keep cluster and failed servers for debugging
 KEEP_CLUSTER=true KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 
@@ -138,12 +152,18 @@ SERVER_READY_TIMEOUT=600 ./scripts/run-e2e.sh
 │   └── setup.sh                  # Cluster setup script
 ├── scripts/
 │   ├── deploy-operator.sh        # Deploy operator from source
+│   ├── build-test-images.sh      # Build custom test server images
 │   ├── test-server.sh            # Deploy, test, cleanup single server
 │   ├── run-e2e.sh                # Main orchestration script
 │   └── cleanup.sh                # Cleanup resources
 ├── test-servers/
-│   ├── kubernetes-mcp-server/    # Example MCP server tests
+│   ├── kubernetes-mcp-server/    # Kubernetes MCP server tests
 │   │   ├── manifest.yaml         # MCPServer CRD
+│   │   ├── test.ts               # TypeScript tests
+│   │   └── README.md             # Server documentation
+│   ├── operator-features/        # Operator features validation tests
+│   │   ├── server/               # Custom MCP server for testing
+│   │   ├── manifest.yaml         # MCPServer CRD with operator features
 │   │   ├── test.ts               # TypeScript tests
 │   │   └── README.md             # Server documentation
 │   └── template/                 # Template for new servers
@@ -160,6 +180,22 @@ SERVER_READY_TIMEOUT=600 ./scripts/run-e2e.sh
 ├── README.md                     # This file
 └── PLANNING.md                   # Detailed planning document
 ```
+
+## Test Servers
+
+The framework includes two types of test servers:
+
+1. **kubernetes-mcp-server** - Tests the official Kubernetes MCP server from Docker Hub
+2. **operator-features** - Tests operator-specific features using a custom MCP server built locally
+
+### Custom Test Server Images
+
+Some tests (like `operator-features`) include a custom MCP server in a `server/` directory. The framework automatically:
+1. Detects `server/` directories in test-servers
+2. Builds Docker images for them
+3. Loads the images into the Kind cluster
+
+This is handled by `scripts/build-test-images.sh`, which is called automatically by `run-e2e.sh`.
 
 ## Adding a New MCP Server
 
@@ -290,8 +326,9 @@ process.exit(framework.exitCode);
 ## Workflow
 
 1. **Cluster Setup** - Creates Kind cluster and waits for readiness
-2. **Operator Deployment** - Builds operator from source and deploys to cluster
-3. **Server Testing** (for each server, sequentially):
+2. **Operator Deployment** - Clones operator repository, builds from source, and deploys to cluster
+3. **Custom Image Building** - Builds and loads any custom MCP server images into the cluster
+4. **Server Testing** (for each server, sequentially):
    - Deploy MCPServer CRD
    - Wait for server to be ready
    - Get service name from CR status
@@ -299,7 +336,7 @@ process.exit(framework.exitCode);
    - Run TypeScript tests
    - Collect logs
    - Cleanup server (unless tests failed and `KEEP_FAILED_SERVERS=true`)
-4. **Cleanup** - Delete cluster (unless `KEEP_CLUSTER=true`)
+5. **Cleanup** - Delete cluster (unless `KEEP_CLUSTER=true`)
 
 ## Debugging
 
@@ -393,16 +430,16 @@ You can manually trigger tests from GitHub UI to test operator PRs or forks:
 3. Specify operator ref and/or repository:
 
 **Testing a PR from the main operator repo:**
-- Operator git ref: `refs/pull/123/head` (replace 123 with PR number)
-- Operator repository URL: (leave default)
+- **Operator git ref**: `refs/pull/123/head` (replace 123 with PR number)
+- **Operator repository URL**: (leave default or use `https://github.com/kubernetes-sigs/mcp-lifecycle-operator`)
 
 **Testing a PR from a fork:**
-- Operator git ref: `branch-name` (the PR branch name)
-- Operator repository URL: `https://github.com/username/mcp-lifecycle-operator`
+- **Operator git ref**: `branch-name` (the PR branch name)
+- **Operator repository URL**: `https://github.com/username/mcp-lifecycle-operator`
 
 **Testing a specific commit:**
-- Operator git ref: `abc123def` (commit SHA)
-- Operator repository URL: (leave default)
+- **Operator git ref**: `abc123def` (commit SHA)
+- **Operator repository URL**: (leave default or use `https://github.com/kubernetes-sigs/mcp-lifecycle-operator`)
 
 See [`.github/workflows/README.md`](.github/workflows/README.md) for detailed workflow documentation.
 
