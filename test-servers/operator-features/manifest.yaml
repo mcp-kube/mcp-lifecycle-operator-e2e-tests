@@ -109,12 +109,16 @@ spec:
   config:
     port: 8080
 
+    # Path: Custom HTTP path for MCP endpoint (tests custom path feature)
+    path: /custom/test/path
+
     # Arguments: Command line arguments passed to the container
     arguments:
       - "--verbose"
       - "--feature-flag"
       - "test-mode"
       - "--config-value=123"
+      - "--mcp-path=/custom/test/path"
 
     # Storage: Mount multiple secrets and configmaps
     storage:

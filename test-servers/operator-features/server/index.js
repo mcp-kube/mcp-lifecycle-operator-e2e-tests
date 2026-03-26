@@ -10,6 +10,15 @@ import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 
 const PORT = process.env.PORT || 8080;
+
+// Parse MCP_PATH from arguments (format: --mcp-path=/custom/path)
+let MCP_PATH = '/mcp'; // default
+for (const arg of process.argv) {
+  if (arg.startsWith('--mcp-path=')) {
+    MCP_PATH = arg.split('=')[1];
+  }
+}
+
 const app = express();
 app.use(express.json());
 
@@ -18,8 +27,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// MCP JSON-RPC endpoint
-app.post('/mcp', async (req, res) => {
+// MCP JSON-RPC endpoint (configurable path)
+app.post(MCP_PATH, async (req, res) => {
   const { id, method, params } = req.body;
 
   console.log(`MCP Request: ${method}`);
@@ -324,6 +333,6 @@ async function handleToolCall(name, args) {
 
 app.listen(PORT, () => {
   console.log(`Operator Features Validator listening on port ${PORT}`);
-  console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
+  console.log(`MCP endpoint: http://localhost:${PORT}${MCP_PATH}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });

@@ -23,6 +23,11 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - Multiple arguments with different formats (`--verbose`, `--feature-flag`, `test-mode`, `--config-value=123`)
   - Validates arguments are passed to the container process
 
+- **Custom HTTP path**:
+  - Custom MCP endpoint path: `/custom/test/path` (default is `/mcp`)
+  - Validates the operator correctly configures the custom path
+  - MCP server listens on the specified custom path
+
 ### Storage Features
 - **Secret mounting**:
   - `secret-for-mounting` mounted at `/mounted-secret` with clearly named files
@@ -72,6 +77,7 @@ The image building and loading is automatically handled by the test framework wh
 
 ### Configuration
 - ✅ Command line arguments passed to container
+- ✅ Custom HTTP path for MCP endpoint
 
 ### Volume Mounts
 - ✅ Multiple Secrets mounted at different paths

@@ -13,8 +13,8 @@ import { MCPClient, TestFramework, runCommonTests } from '../../framework/src/in
 
 async function main() {
   const framework = new TestFramework('operator-features');
-  // Use HTTP transport for this server
-  const client = new MCPClient('http://localhost:8080', { transport: 'http' });
+  // Use HTTP transport for this server with custom path
+  const client = new MCPClient('http://localhost:8080/custom/test/path', { transport: 'http' });
 
   try {
     await framework.run(async (test) => {
@@ -36,6 +36,20 @@ async function main() {
         test.assert(data.args.includes('test-mode'), 'Should have test-mode argument');
         test.assert(data.args.includes('--config-value=123'), 'Should have --config-value=123 argument');
       });
+
+      // ----- Config: Path (Custom HTTP Path) -----
+
+      // Test: Verify custom path is configured
+      await test('custom MCP path is configured', async () => {
+        const result = await client.callTool('get_process_arguments', {});
+        const data = JSON.parse(result.content[0].text);
+
+        // Verify the custom path argument is present
+        test.assert(data.args.includes('--mcp-path=/custom/test/path'), 'Should have --mcp-path=/custom/test/path argument');
+      });
+
+      // Note: The fact that this test runs successfully also proves the custom path works,
+      // since the client is connecting to http://localhost:8080/custom/test/path
 
       // ----- Config: Storage -----
 

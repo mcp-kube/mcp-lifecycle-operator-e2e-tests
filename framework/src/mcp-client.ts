@@ -212,7 +212,8 @@ export class MCPClient {
    * Make an HTTP request to the MCP server (for HTTP transport)
    */
   private async httpRequest(method: string, params: any): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/mcp`, {
+    // Use baseUrl directly - it should include the full path (e.g., http://localhost:8080/mcp or http://localhost:8080/custom/path)
+    const response = await fetch(this.baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
