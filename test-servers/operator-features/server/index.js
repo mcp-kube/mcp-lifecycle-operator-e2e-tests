@@ -108,6 +108,14 @@ app.post('/mcp', async (req, res) => {
                 required: ['path'],
               },
             },
+            {
+              name: 'get_process_arguments',
+              description: 'Get process command line arguments',
+              inputSchema: {
+                type: 'object',
+                properties: {},
+              },
+            },
           ],
         };
         break;
@@ -279,6 +287,25 @@ async function handleToolCall(name, args) {
       } catch (error) {
         result.error = error.message;
       }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'get_process_arguments': {
+      // process.argv includes: [node, script.js, ...args]
+      // We want everything after the script name
+      const result = {
+        argv: process.argv,
+        // Skip node executable and script path, return actual arguments
+        args: process.argv.slice(2),
+      };
 
       return {
         content: [

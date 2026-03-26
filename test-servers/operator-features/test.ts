@@ -23,6 +23,22 @@ async function main() {
 
       // ===== Operator Feature Tests =====
 
+      // ----- Config: Arguments -----
+
+      // Test: Verify command line arguments are passed to container
+      await test('command line arguments are passed correctly', async () => {
+        const result = await client.callTool('get_process_arguments', {});
+        const data = JSON.parse(result.content[0].text);
+
+        // Verify expected arguments are present
+        test.assert(data.args.includes('--verbose'), 'Should have --verbose argument');
+        test.assert(data.args.includes('--feature-flag'), 'Should have --feature-flag argument');
+        test.assert(data.args.includes('test-mode'), 'Should have test-mode argument');
+        test.assert(data.args.includes('--config-value=123'), 'Should have --config-value=123 argument');
+      });
+
+      // ----- Config: Storage -----
+
       // Test: Verify Secret is mounted as volume
       await test('secret is mounted at /mounted-secret', async () => {
         const result = await client.callTool('list_directory', { path: '/mounted-secret' });

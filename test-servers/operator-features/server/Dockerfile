@@ -18,4 +18,6 @@ RUN chmod +x index.js
 USER node
 
 # Start the server
-CMD ["node", "index.js"]
+# Use ENTRYPOINT so that arguments from Kubernetes spec.config.arguments
+# are passed as args to the script, not used to replace the command
+ENTRYPOINT ["./index.js"]

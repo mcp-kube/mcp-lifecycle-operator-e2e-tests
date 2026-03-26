@@ -65,6 +65,13 @@ spec:
   config:
     port: 8080
 
+    # Arguments: Command line arguments passed to the container
+    arguments:
+      - "--verbose"
+      - "--feature-flag"
+      - "test-mode"
+      - "--config-value=123"
+
     # Storage: Mount multiple secrets and configmaps
     storage:
       # Mount Secret #1

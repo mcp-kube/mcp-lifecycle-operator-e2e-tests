@@ -14,8 +14,14 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 - `check_user_id` - Get current UID, GID, and groups
 - `list_directory` - List files in a directory with details
 - `get_file_permissions` - Get file permissions and ownership
+- `get_process_arguments` - Get process command line arguments
 
 ## What This Tests
+
+### Configuration Features
+- **Command line arguments**:
+  - Multiple arguments with different formats (`--verbose`, `--feature-flag`, `test-mode`, `--config-value=123`)
+  - Validates arguments are passed to the container process
 
 ### Storage Features
 - **Secret mounting**:
@@ -23,7 +29,7 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 - **ConfigMap mounting**:
   - `configmap-for-mounting` mounted at `/mounted-configmap` with clearly named files
 
-### Configuration Features
+### Environment Variables
 - **Environment variables from multiple sources**:
   - Plain environment variable: `plain_env_var`
   - From mounted secret (dual-use): `env_var_from_mounted_secret_key_1`
@@ -57,6 +63,9 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 The image building and loading is automatically handled by the test framework when you run `./scripts/run-e2e.sh`.
 
 ## Test Coverage
+
+### Configuration
+- ✅ Command line arguments passed to container
 
 ### Volume Mounts
 - ✅ Multiple Secrets mounted at different paths
