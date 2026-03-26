@@ -11,7 +11,12 @@ on:
     # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
   workflow_dispatch:
-    # Allow manual triggering
+    # Allow manual triggering with optional operator ref
+    inputs:
+      operator_ref:
+        description: 'Operator git ref to test (branch, tag, or commit SHA)'
+        required: false
+        default: 'main'
 
 jobs:
   e2e-tests:
@@ -68,6 +73,8 @@ jobs:
         env:
           # Use CI-friendly settings
           NO_COLOR: "1"
+          # Use operator ref from manual workflow dispatch input (if provided)
+          OPERATOR_REF: ${{ github.event.inputs.operator_ref || 'main' }}
 
       - name: Upload test logs on failure
         if: failure() && steps.e2e.conclusion == 'failure'
