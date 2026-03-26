@@ -141,6 +141,72 @@ async function main() {
         test.assertEqual(key2Data.value, 'env-var-value-from-configmap-2', 'Value should match');
       });
 
+      // ----- Config: EnvFrom (Bulk Injection) -----
+
+      // Test: Environment variables from envFrom secret (no prefix)
+      await test('envFrom secret without prefix injects all keys', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'envfrom-secret-key-1 should exist');
+        test.assertEqual(key1Data.value, 'envfrom-secret-value-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'envfrom-secret-key-2 should exist');
+        test.assertEqual(key2Data.value, 'envfrom-secret-value-2', 'Value should match');
+
+        const key3Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-3' });
+        const key3Data = JSON.parse(key3Result.content[0].text);
+        test.assert(key3Data.exists, 'envfrom-secret-key-3 should exist');
+        test.assertEqual(key3Data.value, 'envfrom-secret-value-3', 'Value should match');
+      });
+
+      // Test: Environment variables from envFrom secret with prefix
+      await test('envFrom secret with prefix adds prefix to all keys', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-secret-key-1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'PREFIX_prefixed-secret-key-1 should exist');
+        test.assertEqual(key1Data.value, 'prefixed-secret-value-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-secret-key-2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'PREFIX_prefixed-secret-key-2 should exist');
+        test.assertEqual(key2Data.value, 'prefixed-secret-value-2', 'Value should match');
+      });
+
+      // Test: Environment variables from envFrom configmap (no prefix)
+      await test('envFrom configmap without prefix injects all keys', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'envfrom-configmap-key-1 should exist');
+        test.assertEqual(key1Data.value, 'envfrom-configmap-value-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'envfrom-configmap-key-2 should exist');
+        test.assertEqual(key2Data.value, 'envfrom-configmap-value-2', 'Value should match');
+
+        const key3Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-3' });
+        const key3Data = JSON.parse(key3Result.content[0].text);
+        test.assert(key3Data.exists, 'envfrom-configmap-key-3 should exist');
+        test.assertEqual(key3Data.value, 'envfrom-configmap-value-3', 'Value should match');
+      });
+
+      // Test: Environment variables from envFrom configmap with prefix
+      await test('envFrom configmap with prefix adds prefix to all keys', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-configmap-key-1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'PREFIX_prefixed-configmap-key-1 should exist');
+        test.assertEqual(key1Data.value, 'prefixed-configmap-value-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-configmap-key-2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'PREFIX_prefixed-configmap-key-2 should exist');
+        test.assertEqual(key2Data.value, 'prefixed-configmap-value-2', 'Value should match');
+      });
+
+      // ----- Config: Security -----
+
       // Test: Verify security context (user/group IDs)
       await test('security context user IDs are correct', async () => {
         const result = await client.callTool('check_user_id', {});

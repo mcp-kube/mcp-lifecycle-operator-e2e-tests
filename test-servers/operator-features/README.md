@@ -37,6 +37,12 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - From mounted configmap (dual-use): `env_var_from_mounted_configmap_key_1`
   - From configmap (env-only): `env_var_from_configmap_key_1`, `env_var_from_configmap_key_2`
 
+- **Bulk environment variable injection (envFrom)**:
+  - From secret without prefix: `envfrom-secret-key-1`, `envfrom-secret-key-2`, `envfrom-secret-key-3`
+  - From secret with prefix: `PREFIX_prefixed-secret-key-1`, `PREFIX_prefixed-secret-key-2`
+  - From configmap without prefix: `envfrom-configmap-key-1`, `envfrom-configmap-key-2`, `envfrom-configmap-key-3`
+  - From configmap with prefix: `PREFIX_prefixed-configmap-key-1`, `PREFIX_prefixed-configmap-key-2`
+
 ### Security Features
 - **Security context**:
   - `runAsUser: 1000`
@@ -78,6 +84,9 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Environment variables from multiple Secrets
 - ✅ Environment variables from multiple ConfigMaps
 - ✅ All sources (plain, Secret, ConfigMap) work simultaneously
+- ✅ Bulk injection via envFrom (with and without prefix)
+- ✅ EnvFrom from Secrets (with and without prefix)
+- ✅ EnvFrom from ConfigMaps (with and without prefix)
 
 ### Security
 - ✅ Security context UID/GID correct
