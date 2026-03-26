@@ -125,6 +125,20 @@ app.post(MCP_PATH, async (req, res) => {
                 properties: {},
               },
             },
+            {
+              name: 'test_directory_writable',
+              description: 'Test if a directory is writable by attempting to create and delete a test file',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  path: {
+                    type: 'string',
+                    description: 'Directory path to test',
+                  },
+                },
+                required: ['path'],
+              },
+            },
           ],
         };
         break;
@@ -315,6 +329,49 @@ async function handleToolCall(name, args) {
         // Skip node executable and script path, return actual arguments
         args: process.argv.slice(2),
       };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'test_directory_writable': {
+      const path = args.path;
+      const result = {
+        path,
+        writable: false,
+        error: null,
+      };
+
+      try {
+        // Check if directory exists
+        if (!existsSync(path)) {
+          result.error = 'Directory does not exist';
+        } else {
+          const stat = statSync(path);
+          if (!stat.isDirectory()) {
+            result.error = 'Path is not a directory';
+          } else {
+            // Try to create a test file
+            const testFilePath = join(path, '.write-test-' + Date.now());
+            try {
+              await fs.writeFile(testFilePath, 'test');
+              // If write succeeded, try to delete it
+              await fs.unlink(testFilePath);
+              result.writable = true;
+            } catch (writeError) {
+              result.error = `Cannot write: ${writeError.message}`;
+            }
+          }
+        }
+      } catch (error) {
+        result.error = error.message;
+      }
 
       return {
         content: [

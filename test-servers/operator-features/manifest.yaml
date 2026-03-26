@@ -94,6 +94,18 @@ data:
   prefixed-configmap-key-1: "prefixed-configmap-value-1"
   prefixed-configmap-key-2: "prefixed-configmap-value-2"
 ---
+# ConfigMap #5: Used for writable mount (ReadWrite permission)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-writable-mount
+  namespace: default
+data:
+  initial-file.txt: "initial-content-in-writable-directory"
+  readme.txt: |
+    This directory is mounted with ReadWrite permissions.
+    The MCP server should be able to create, modify, and delete files here.
+---
 # MCPServer with multiple ConfigMaps and Secrets
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
@@ -137,6 +149,14 @@ spec:
           type: ConfigMap
           configMap:
             name: configmap-for-mounting
+
+      # Mount ConfigMap #5 with ReadWrite permissions (writable directory)
+      - path: /writable-directory
+        permissions: ReadWrite
+        source:
+          type: ConfigMap
+          configMap:
+            name: configmap-for-writable-mount
 
     # Environment variables from multiple sources
     env:

@@ -9,7 +9,7 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 ### MCP Tools Provided
 
 - `check_file_exists` - Check if a file exists and return its content
-- `check_directory_writable` - Test if a directory is writable
+- `test_directory_writable` - Test if a directory is writable by creating/deleting a test file
 - `get_env_var` - Get environment variable values
 - `check_user_id` - Get current UID, GID, and groups
 - `list_directory` - List files in a directory with details
@@ -29,10 +29,16 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - MCP server listens on the specified custom path
 
 ### Storage Features
-- **Secret mounting**:
+- **Secret mounting (ReadOnly)**:
   - `secret-for-mounting` mounted at `/mounted-secret` with clearly named files
-- **ConfigMap mounting**:
+- **ConfigMap mounting (ReadOnly)**:
   - `configmap-for-mounting` mounted at `/mounted-configmap` with clearly named files
+- **ConfigMap with ReadWrite permission**:
+  - `configmap-for-writable-mount` mounted at `/writable-directory`
+  - Permission: ReadWrite (operator correctly omits `readOnly` flag from mount)
+  - **Note**: ConfigMap/Secret volumes in Kubernetes are inherently read-only at the filesystem level
+  - Tests verify the operator correctly processes the ReadWrite permission setting
+  - Actual filesystem writes are not possible due to Kubernetes limitations
 
 ### Environment Variables
 - **Environment variables from multiple sources**:
@@ -80,10 +86,12 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Custom HTTP path for MCP endpoint
 
 ### Volume Mounts
-- ✅ Multiple Secrets mounted at different paths
+- ✅ Multiple Secrets mounted at different paths (ReadOnly)
 - ✅ Secret files readable with correct contents
-- ✅ Multiple ConfigMaps mounted at different paths
+- ✅ Multiple ConfigMaps mounted at different paths (ReadOnly)
 - ✅ ConfigMap files readable with correct contents
+- ✅ Operator correctly processes ReadWrite permission (mount configured without readOnly flag)
+- ℹ️  ConfigMap/Secret volumes are inherently read-only in Kubernetes (platform limitation)
 
 ### Environment Variables
 - ✅ Plain environment variables work
