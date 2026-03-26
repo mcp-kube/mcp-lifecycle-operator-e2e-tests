@@ -11,6 +11,7 @@ export {
   testCanConnect,
   testListTools,
   runCommonTests,
+  testCallTool,
 } from './common-tests.js';
 export type {
   Tool,

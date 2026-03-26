@@ -48,3 +48,40 @@ export async function runCommonTests(test: TestFunction, client: MCPClient) {
   await testCanConnect(test, client);
   await testListTools(test, client);
 }
+
+/**
+ * Test that a tool can be called successfully and log the response
+ *
+ * @param test - The test function
+ * @param client - The MCP client
+ * @param testName - Name of the test
+ * @param toolName - Name of the tool to call
+ * @param args - Arguments to pass to the tool
+ * @returns The tool call result
+ */
+export async function testCallTool(
+  test: TestFunction,
+  client: MCPClient,
+  testName: string,
+  toolName: string,
+  args: any = {}
+): Promise<any> {
+  return await test(testName, async () => {
+    console.log(`    Calling tool: ${toolName}`);
+    const result = await client.callTool(toolName, args);
+
+    test.assert(result !== undefined, 'Tool should return a result');
+
+    if (result.content && Array.isArray(result.content)) {
+      for (const item of result.content) {
+        if (item.type === 'text' && item.text) {
+          console.log(`    Response text:\n===========\n`, item.text, `\n===========`);
+        } else {
+          console.log(`    Item:`, item);
+        }
+      }
+    }
+
+    return result;
+  });
+}
