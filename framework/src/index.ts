@@ -6,6 +6,12 @@
 export { MCPClient } from './mcp-client.js';
 export { TestFramework } from './test-framework.js';
 export { K8sUtils } from './k8s-utils.js';
+export {
+  testServerReachable,
+  testCanConnect,
+  testListTools,
+  runCommonTests,
+} from './common-tests.js';
 export type {
   Tool,
   Resource,
