@@ -45,9 +45,10 @@ npm install
 This will:
 1. Create a Kind cluster
 2. Build and deploy the MCP lifecycle operator from source
-3. Test each MCP server in the `test-servers/` directory
-4. Collect logs and display results
-5. Clean up the cluster
+3. Build and load any custom MCP server images (from test-servers/*/server/ directories)
+4. Test each MCP server in the `test-servers/` directory sequentially
+5. Collect logs and display results
+6. Clean up the cluster
 
 ## Usage
 

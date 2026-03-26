@@ -87,9 +87,18 @@ if ! "${SCRIPT_DIR}/deploy-operator.sh"; then
   exit 1
 fi
 
-# 3. Run tests for each server (sequential, continue on failure)
+# 3. Build and load custom MCP server images
 header_text "
-=== Phase 3: Server Tests ===
+=== Phase 3: Build Custom Images ===
+"
+if ! "${SCRIPT_DIR}/build-test-images.sh"; then
+  error_text "Failed to build custom images"
+  exit 1
+fi
+
+# 4. Run tests for each server (sequential, continue on failure)
+header_text "
+=== Phase 4: Server Tests ===
 "
 
 for server_dir in "${PROJECT_ROOT}"/test-servers/*/; do

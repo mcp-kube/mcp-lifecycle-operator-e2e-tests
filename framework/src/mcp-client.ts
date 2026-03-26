@@ -65,21 +65,21 @@ export class MCPClient {
 
   /**
    * Wait for the MCP server to be ready
-   * Retries connection until successful or max retries reached
+   * Retries until the server is responding or max retries reached
+   * Does not connect - call connect() separately after this succeeds
    */
   async waitForReady(): Promise<void> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        // Try to fetch the base URL first to check if server is up
+        // Try to fetch the base URL to check if server is up
         const response = await fetch(this.baseUrl, {
           signal: AbortSignal.timeout(this.timeout),
         });
 
         if (response.ok || response.status === 404) {
-          // Server is responding, try to connect via MCP
-          await this.connect();
+          // Server is responding
           return;
         }
       } catch (error) {

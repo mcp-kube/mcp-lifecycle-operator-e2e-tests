@@ -1,0 +1,104 @@
+---
+# Secret to be mounted into the MCP server
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+  namespace: default
+type: Opaque
+stringData:
+  username: admin
+  password: secretpassword123
+  config.json: |
+    {
+      "apiKey": "test-key-12345",
+      "endpoint": "https://api.example.com"
+    }
+---
+# ConfigMap to be mounted
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  app.conf: |
+    # Test configuration file
+    server_mode = production
+    log_level = debug
+---
+# MCPServer with various operator features
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: operator-features
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      # Custom MCP server that validates operator features
+      ref: localhost/operator-features-validator:local
+
+  config:
+    port: 8080
+
+    # Mount secret as files
+    storage:
+      - path: /secrets
+        permissions: ReadOnly
+        source:
+          type: Secret
+          secret:
+            secretName: test-secret
+
+      # Mount ConfigMap
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: test-config
+
+    # Environment variables
+    env:
+      - name: TEST_ENV_VAR
+        value: "test-value-123"
+      - name: SECRET_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: test-secret
+            key: username
+      - name: CONFIG_VALUE
+        valueFrom:
+          configMapKeyRef:
+            name: test-config
+            key: app.conf
+
+  runtime:
+    # Security context settings
+    security:
+      # Pod-level security context
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      # Container-level security context
+      securityContext:
+        readOnlyRootFilesystem: false
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+
+    # Resource limits
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "128Mi"
+        cpu: "200m"
