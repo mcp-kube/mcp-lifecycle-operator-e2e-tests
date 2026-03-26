@@ -24,52 +24,106 @@ async function main() {
 
       // ===== Operator Feature Tests =====
 
-      // Test: Verify secret files are mounted
-      await test('secret is mounted at /secrets', async () => {
-        const result = await client.callTool('list_directory', { path: '/secrets' });
+      // Test: Verify Secret is mounted as volume
+      await test('secret is mounted at /mounted-secret', async () => {
+        const result = await client.callTool('list_directory', { path: '/mounted-secret' });
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
-        test.assert(fileNames.includes('username'), 'Secret file "username" should exist');
-        test.assert(fileNames.includes('password'), 'Secret file "password" should exist');
+        test.assert(fileNames.includes('mounted-secret-file-1.txt'), 'Should have mounted-secret-file-1.txt');
+        test.assert(fileNames.includes('mounted-secret-file-2.txt'), 'Should have mounted-secret-file-2.txt');
+        test.assert(fileNames.includes('mounted-secret-config.json'), 'Should have mounted-secret-config.json');
       });
 
-      // Test: Verify secret file contents
-      await test('secret files contain correct data', async () => {
-        const usernameResult = await client.callTool('check_file_exists', { path: '/secrets/username' });
-        const usernameData = JSON.parse(usernameResult.content[0].text);
+      // Test: Verify mounted secret file contents
+      await test('mounted secret files contain correct data', async () => {
+        const file1Result = await client.callTool('check_file_exists', { path: '/mounted-secret/mounted-secret-file-1.txt' });
+        const file1Data = JSON.parse(file1Result.content[0].text);
 
-        test.assert(usernameData.exists, 'Username file should exist');
-        test.assertEqual(usernameData.content.trim(), 'admin', 'Username should be "admin"');
+        test.assert(file1Data.exists, 'mounted-secret-file-1.txt should exist');
+        test.assertEqual(file1Data.content.trim(), 'content-from-mounted-secret-file-1', 'Content should match');
+
+        const configResult = await client.callTool('check_file_exists', { path: '/mounted-secret/mounted-secret-config.json' });
+        const configData = JSON.parse(configResult.content[0].text);
+        test.assert(configData.content.includes('value-from-mounted-secret'), 'Config should have expected value');
       });
 
-      // Test: Verify ConfigMap is mounted
-      await test('configmap is mounted at /config', async () => {
-        const result = await client.callTool('list_directory', { path: '/config' });
+      // Test: Verify ConfigMap is mounted as volume
+      await test('configmap is mounted at /mounted-configmap', async () => {
+        const result = await client.callTool('list_directory', { path: '/mounted-configmap' });
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
-        test.assert(fileNames.includes('app.conf'), 'ConfigMap file "app.conf" should exist');
+        test.assert(fileNames.includes('mounted-configmap-file-1.conf'), 'Should have mounted-configmap-file-1.conf');
+        test.assert(fileNames.includes('mounted-configmap-file-2.yaml'), 'Should have mounted-configmap-file-2.yaml');
       });
 
-      // Test: Verify ConfigMap file contents
-      await test('configmap file contains correct data', async () => {
-        const result = await client.callTool('check_file_exists', { path: '/config/app.conf' });
+      // Test: Verify mounted configmap file contents
+      await test('mounted configmap files contain correct data', async () => {
+        const confResult = await client.callTool('check_file_exists', { path: '/mounted-configmap/mounted-configmap-file-1.conf' });
+        const confData = JSON.parse(confResult.content[0].text);
+
+        test.assert(confData.exists, 'mounted-configmap-file-1.conf should exist');
+        test.assert(confData.content.includes('value-from-mounted-configmap'), 'Config should have expected value');
+
+        const yamlResult = await client.callTool('check_file_exists', { path: '/mounted-configmap/mounted-configmap-file-2.yaml' });
+        const yamlData = JSON.parse(yamlResult.content[0].text);
+        test.assert(yamlData.content.includes('from-mounted-configmap'), 'YAML should have expected value');
+      });
+
+      // Test: Verify plain environment variable
+      await test('plain environment variable is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'plain_env_var' });
         const data = JSON.parse(result.content[0].text);
 
-        test.assert(data.exists, 'Config file should exist');
-        test.assert(data.content.includes('server_mode = production'), 'Config should have server_mode');
+        test.assert(data.exists, 'plain_env_var should exist');
+        test.assertEqual(data.value, 'plain-env-var-value', 'Value should match');
       });
 
-      // Test: Verify environment variables
-      await test('environment variables are set correctly', async () => {
-        const testEnvResult = await client.callTool('get_env_var', { name: 'TEST_ENV_VAR' });
-        const testEnvData = JSON.parse(testEnvResult.content[0].text);
+      // Test: Environment variable from mounted secret (demonstrating same resource can be mounted AND used for env vars)
+      await test('env var from mounted secret is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_mounted_secret_key_1' });
+        const data = JSON.parse(result.content[0].text);
 
-        test.assert(testEnvData.exists, 'TEST_ENV_VAR should exist');
-        test.assertEqual(testEnvData.value, 'test-value-123', 'TEST_ENV_VAR should have correct value');
+        test.assert(data.exists, 'env_var_from_mounted_secret_key_1 should exist');
+        test.assertEqual(data.value, 'content-from-mounted-secret-file-1', 'Value should match mounted file content');
+      });
+
+      // Test: Environment variables from secret (not mounted)
+      await test('env vars from secret-for-env-vars are set', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'env_var_from_secret_key_1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'env_var_from_secret_key_1 should exist');
+        test.assertEqual(key1Data.value, 'env-var-value-from-secret-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'env_var_from_secret_key_2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'env_var_from_secret_key_2 should exist');
+        test.assertEqual(key2Data.value, 'env-var-value-from-secret-2', 'Value should match');
+      });
+
+      // Test: Environment variable from mounted configmap (demonstrating same resource can be mounted AND used for env vars)
+      await test('env var from mounted configmap is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_mounted_configmap_key_1' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'env_var_from_mounted_configmap_key_1 should exist');
+        test.assert(data.value.includes('value-from-mounted-configmap'), 'Value should include expected content');
+      });
+
+      // Test: Environment variables from configmap (not mounted)
+      await test('env vars from configmap-for-env-vars are set', async () => {
+        const key1Result = await client.callTool('get_env_var', { name: 'env_var_from_configmap_key_1' });
+        const key1Data = JSON.parse(key1Result.content[0].text);
+        test.assert(key1Data.exists, 'env_var_from_configmap_key_1 should exist');
+        test.assertEqual(key1Data.value, 'env-var-value-from-configmap-1', 'Value should match');
+
+        const key2Result = await client.callTool('get_env_var', { name: 'env_var_from_configmap_key_2' });
+        const key2Data = JSON.parse(key2Result.content[0].text);
+        test.assert(key2Data.exists, 'env_var_from_configmap_key_2 should exist');
+        test.assertEqual(key2Data.value, 'env-var-value-from-configmap-2', 'Value should match');
       });
 
       // Test: Verify security context (user/group IDs)
@@ -84,10 +138,10 @@ async function main() {
 
       // Test: Verify file permissions reflect fsGroup
       await test('file permissions reflect fsGroup', async () => {
-        const result = await client.callTool('get_file_permissions', { path: '/secrets' });
+        const result = await client.callTool('get_file_permissions', { path: '/mounted-secret' });
         const data = JSON.parse(result.content[0].text);
 
-        test.assert(data.exists, '/secrets should exist');
+        test.assert(data.exists, '/mounted-secret should exist');
         test.assertEqual(data.permissions.gid, 2000, 'fsGroup should be 2000');
       });
 

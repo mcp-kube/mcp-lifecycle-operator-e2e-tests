@@ -1,33 +1,56 @@
 ---
-# Secret to be mounted into the MCP server
+# Secret #1: Mounted as volume
 apiVersion: v1
 kind: Secret
 metadata:
-  name: test-secret
+  name: secret-for-mounting
   namespace: default
 type: Opaque
 stringData:
-  username: admin
-  password: secretpassword123
-  config.json: |
+  mounted-secret-file-1.txt: "content-from-mounted-secret-file-1"
+  mounted-secret-file-2.txt: "content-from-mounted-secret-file-2"
+  mounted-secret-config.json: |
     {
-      "apiKey": "test-key-12345",
-      "endpoint": "https://api.example.com"
+      "key": "value-from-mounted-secret"
     }
 ---
-# ConfigMap to be mounted
+# Secret #2: Used for env vars
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-for-env-vars
+  namespace: default
+type: Opaque
+stringData:
+  env-var-key-1: "env-var-value-from-secret-1"
+  env-var-key-2: "env-var-value-from-secret-2"
+---
+# ConfigMap #1: Mounted as volume
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: test-config
+  name: configmap-for-mounting
   namespace: default
 data:
-  app.conf: |
-    # Test configuration file
-    server_mode = production
-    log_level = debug
+  mounted-configmap-file-1.conf: |
+    # Config file content
+    setting_1 = value-from-mounted-configmap
+    setting_2 = another-value-from-mounted-configmap
+  mounted-configmap-file-2.yaml: |
+    data:
+      - item: from-mounted-configmap
 ---
-# MCPServer with various operator features
+# ConfigMap #2: Used for env vars
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-env-vars
+  namespace: default
+data:
+  env-var-key-1: "env-var-value-from-configmap-1"
+  env-var-key-2: "env-var-value-from-configmap-2"
+---
+# MCPServer with multiple ConfigMaps and Secrets
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -37,43 +60,72 @@ spec:
   source:
     type: ContainerImage
     containerImage:
-      # Custom MCP server that validates operator features
       ref: localhost/operator-features-validator:local
 
   config:
     port: 8080
 
-    # Mount secret as files
+    # Storage: Mount multiple secrets and configmaps
     storage:
-      - path: /secrets
+      # Mount Secret #1
+      - path: /mounted-secret
         permissions: ReadOnly
         source:
           type: Secret
           secret:
-            secretName: test-secret
+            secretName: secret-for-mounting
 
-      # Mount ConfigMap
-      - path: /config
+      # Mount ConfigMap #1
+      - path: /mounted-configmap
         permissions: ReadOnly
         source:
           type: ConfigMap
           configMap:
-            name: test-config
+            name: configmap-for-mounting
 
-    # Environment variables
+    # Environment variables from multiple sources
     env:
-      - name: TEST_ENV_VAR
-        value: "test-value-123"
-      - name: SECRET_USERNAME
+      # Plain environment variable
+      - name: plain_env_var
+        value: "plain-env-var-value"
+
+      # From Secret #1 (secret-for-mounting) - demonstrating same secret can be both mounted AND used for env vars
+      - name: env_var_from_mounted_secret_key_1
         valueFrom:
           secretKeyRef:
-            name: test-secret
-            key: username
-      - name: CONFIG_VALUE
+            name: secret-for-mounting
+            key: mounted-secret-file-1.txt
+
+      # From Secret #2 (secret-for-env-vars) - only used for env vars, not mounted
+      - name: env_var_from_secret_key_1
+        valueFrom:
+          secretKeyRef:
+            name: secret-for-env-vars
+            key: env-var-key-1
+      - name: env_var_from_secret_key_2
+        valueFrom:
+          secretKeyRef:
+            name: secret-for-env-vars
+            key: env-var-key-2
+
+      # From ConfigMap #1 (configmap-for-mounting) - demonstrating same configmap can be both mounted AND used for env vars
+      - name: env_var_from_mounted_configmap_key_1
         valueFrom:
           configMapKeyRef:
-            name: test-config
-            key: app.conf
+            name: configmap-for-mounting
+            key: mounted-configmap-file-1.conf
+
+      # From ConfigMap #2 (configmap-for-env-vars) - only used for env vars, not mounted
+      - name: env_var_from_configmap_key_1
+        valueFrom:
+          configMapKeyRef:
+            name: configmap-for-env-vars
+            key: env-var-key-1
+      - name: env_var_from_configmap_key_2
+        valueFrom:
+          configMapKeyRef:
+            name: configmap-for-env-vars
+            key: env-var-key-2
 
   runtime:
     # Security context settings

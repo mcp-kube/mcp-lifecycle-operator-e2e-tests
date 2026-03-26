@@ -18,14 +18,18 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 ## What This Tests
 
 ### Storage Features
-- **Secret mounting**: Mounts a Kubernetes Secret as files at `/secrets`
-- **ConfigMap mounting**: Mounts a ConfigMap as files at `/config`
+- **Secret mounting**:
+  - `secret-for-mounting` mounted at `/mounted-secret` with clearly named files
+- **ConfigMap mounting**:
+  - `configmap-for-mounting` mounted at `/mounted-configmap` with clearly named files
 
 ### Configuration Features
-- **Environment variables**:
-  - Plain environment variables
-  - Environment variables from Secrets
-  - Environment variables from ConfigMaps
+- **Environment variables from multiple sources**:
+  - Plain environment variable: `plain_env_var`
+  - From mounted secret (dual-use): `env_var_from_mounted_secret_key_1`
+  - From secret (env-only): `env_var_from_secret_key_1`, `env_var_from_secret_key_2`
+  - From mounted configmap (dual-use): `env_var_from_mounted_configmap_key_1`
+  - From configmap (env-only): `env_var_from_configmap_key_1`, `env_var_from_configmap_key_2`
 
 ### Security Features
 - **Security context**:
@@ -54,14 +58,22 @@ The image building and loading is automatically handled by the test framework wh
 
 ## Test Coverage
 
-- ✅ Secrets mounted and readable via MCP tools
-- ✅ Secret file contents correct
-- ✅ ConfigMaps mounted and readable
-- ✅ ConfigMap file contents correct
-- ✅ Environment variables accessible
-- ✅ Environment variables from secrets work
+### Volume Mounts
+- ✅ Multiple Secrets mounted at different paths
+- ✅ Secret files readable with correct contents
+- ✅ Multiple ConfigMaps mounted at different paths
+- ✅ ConfigMap files readable with correct contents
+
+### Environment Variables
+- ✅ Plain environment variables work
+- ✅ Environment variables from multiple Secrets
+- ✅ Environment variables from multiple ConfigMaps
+- ✅ All sources (plain, Secret, ConfigMap) work simultaneously
+
+### Security & Resources
 - ✅ Security context UID/GID correct
 - ✅ fsGroup applied to mounted files
+- ✅ Resource limits and requests applied
 
 ## Advantages
 
