@@ -152,8 +152,14 @@ export class MCPClient {
    */
   async listResources(): Promise<Resource[]> {
     this.ensureConnected();
-    const response = await this.client.listResources();
-    return response.resources as Resource[];
+
+    if (this.transportType === 'sse') {
+      const response = await this.client!.listResources();
+      return (response.resources || []) as Resource[];
+    } else {
+      const response = await this.httpRequest('resources/list', {});
+      return (response.resources || []) as Resource[];
+    }
   }
 
   /**
@@ -161,8 +167,13 @@ export class MCPClient {
    */
   async readResource(uri: string): Promise<any> {
     this.ensureConnected();
-    const response = await this.client.readResource({ uri });
-    return response;
+
+    if (this.transportType === 'sse') {
+      const response = await this.client!.readResource({ uri });
+      return response || {};
+    } else {
+      return await this.httpRequest('resources/read', { uri });
+    }
   }
 
   /**
@@ -170,8 +181,14 @@ export class MCPClient {
    */
   async listPrompts(): Promise<Prompt[]> {
     this.ensureConnected();
-    const response = await this.client.listPrompts();
-    return response.prompts as Prompt[];
+
+    if (this.transportType === 'sse') {
+      const response = await this.client!.listPrompts();
+      return (response.prompts || []) as Prompt[];
+    } else {
+      const response = await this.httpRequest('prompts/list', {});
+      return (response.prompts || []) as Prompt[];
+    }
   }
 
   /**
@@ -179,11 +196,16 @@ export class MCPClient {
    */
   async getPrompt(name: string, args: any = {}): Promise<any> {
     this.ensureConnected();
-    const response = await this.client.getPrompt({
-      name,
-      arguments: args,
-    });
-    return response;
+
+    if (this.transportType === 'sse') {
+      const response = await this.client!.getPrompt({
+        name,
+        arguments: args,
+      });
+      return response || {};
+    } else {
+      return await this.httpRequest('prompts/get', { name, arguments: args });
+    }
   }
 
   /**
@@ -201,7 +223,7 @@ export class MCPClient {
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json() as any;
     if (data.error) {
       throw new Error(`MCP error ${data.error.code}: ${data.error.message}`);
     }

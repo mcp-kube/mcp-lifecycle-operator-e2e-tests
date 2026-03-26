@@ -43,7 +43,10 @@ header_text "[OPERATOR] Building operator Docker image..."
 make docker-build IMG="${OPERATOR_IMAGE}"
 
 header_text "[OPERATOR] Loading image into Kind cluster..."
-kind load docker-image "${OPERATOR_IMAGE}" --name "${KIND_CLUSTER_NAME}"
+# Save image to tar and load into kind (more reliable in CI)
+docker save "${OPERATOR_IMAGE}" -o /tmp/operator-image.tar
+kind load image-archive /tmp/operator-image.tar --name "${KIND_CLUSTER_NAME}"
+rm -f /tmp/operator-image.tar
 
 header_text "[OPERATOR] Deploying operator to cluster..."
 make deploy IMG="${OPERATOR_IMAGE}"
