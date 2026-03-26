@@ -14,9 +14,13 @@ on:
     # Allow manual triggering with optional operator ref
     inputs:
       operator_ref:
-        description: 'Operator git ref to test (branch, tag, or commit SHA)'
+        description: 'Operator git ref to test (branch, tag, commit SHA, or refs/pull/123/head for PRs)'
         required: false
         default: 'main'
+      operator_repo:
+        description: 'Operator repository URL (for testing forks)'
+        required: false
+        default: 'https://github.com/kubernetes-sigs/mcp-lifecycle-operator'
 
 jobs:
   e2e-tests:
@@ -73,8 +77,9 @@ jobs:
         env:
           # Use CI-friendly settings
           NO_COLOR: "1"
-          # Use operator ref from manual workflow dispatch input (if provided)
+          # Use operator ref and repo from manual workflow dispatch input (if provided)
           OPERATOR_REF: ${{ github.event.inputs.operator_ref || 'main' }}
+          OPERATOR_REPO: ${{ github.event.inputs.operator_repo || 'https://github.com/kubernetes-sigs/mcp-lifecycle-operator' }}
 
       - name: Upload test logs on failure
         if: failure() && steps.e2e.conclusion == 'failure'

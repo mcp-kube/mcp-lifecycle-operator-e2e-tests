@@ -69,7 +69,11 @@ You can manually trigger the E2E tests workflow from the GitHub Actions UI:
 1. Go to the "Actions" tab
 2. Select "E2E Tests" workflow
 3. Click "Run workflow"
-4. Optionally specify a different operator ref
+4. Optionally specify operator ref and/or repository:
+   - **Testing a PR from the main repo**: Enter `refs/pull/123/head` (replace 123 with PR number)
+   - **Testing a branch**: Enter the branch name (e.g., `feature-branch`)
+   - **Testing a fork PR**: Enter the fork URL in "Operator repository URL" and the branch name in "Operator git ref"
+   - **Testing a commit**: Enter the commit SHA
 
 ### Environment Variables
 

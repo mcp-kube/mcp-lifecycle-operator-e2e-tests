@@ -23,6 +23,7 @@ function success_text {
 
 # Configuration
 OPERATOR_REF=${OPERATOR_REF:-"main"}
+OPERATOR_REPO=${OPERATOR_REPO:-"https://github.com/kubernetes-sigs/mcp-lifecycle-operator"}
 KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-"kind"}
 OPERATOR_IMAGE=${OPERATOR_IMAGE:-"mcp-operator:test"}
 
@@ -33,11 +34,18 @@ OPERATOR_DIR=$(mktemp -d)
 trap "rm -rf ${OPERATOR_DIR}" EXIT
 
 header_text "[OPERATOR] Cloning operator repository..."
-git clone --quiet https://github.com/kubernetes-sigs/mcp-lifecycle-operator "${OPERATOR_DIR}"
+git clone --quiet "${OPERATOR_REPO}" "${OPERATOR_DIR}"
 cd "${OPERATOR_DIR}"
 
 header_text "[OPERATOR] Checking out ref: ${OPERATOR_REF}"
-git checkout --quiet "${OPERATOR_REF}"
+# If ref looks like a PR ref (refs/pull/123/head), fetch it explicitly
+if [[ "${OPERATOR_REF}" =~ ^refs/pull/[0-9]+/(head|merge)$ ]]; then
+  header_text "[OPERATOR] Fetching PR ref from upstream..."
+  git fetch origin "${OPERATOR_REF}:pr-ref"
+  git checkout --quiet pr-ref
+else
+  git checkout --quiet "${OPERATOR_REF}"
+fi
 
 header_text "[OPERATOR] Building operator Docker image..."
 make docker-build IMG="${OPERATOR_IMAGE}"

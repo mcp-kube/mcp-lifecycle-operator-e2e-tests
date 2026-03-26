@@ -386,10 +386,23 @@ On test failure, logs are uploaded as artifacts (7 day retention):
 
 ### Manual Workflow Dispatch
 
-You can manually trigger tests from GitHub UI:
+You can manually trigger tests from GitHub UI to test operator PRs or forks:
+
 1. Go to Actions → E2E Tests
 2. Click "Run workflow"
-3. Optionally specify operator ref
+3. Specify operator ref and/or repository:
+
+**Testing a PR from the main operator repo:**
+- Operator git ref: `refs/pull/123/head` (replace 123 with PR number)
+- Operator repository URL: (leave default)
+
+**Testing a PR from a fork:**
+- Operator git ref: `branch-name` (the PR branch name)
+- Operator repository URL: `https://github.com/username/mcp-lifecycle-operator`
+
+**Testing a specific commit:**
+- Operator git ref: `abc123def` (commit SHA)
+- Operator repository URL: (leave default)
 
 See [`.github/workflows/README.md`](.github/workflows/README.md) for detailed workflow documentation.
 
