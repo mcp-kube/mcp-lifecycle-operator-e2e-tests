@@ -3,11 +3,10 @@
  * E2E tests for MCP Lifecycle Operator Features
  *
  * This test validates that the operator correctly configures:
- * - Secrets mounted as volumes
- * - ConfigMaps mounted as volumes
- * - Security context settings
- * - Environment variables
- * - Resource limits
+ * - Secrets mounted as volumes (multiple secrets, some mounted, some only for env vars)
+ * - ConfigMaps mounted as volumes (multiple configmaps, some mounted, some only for env vars)
+ * - Security context settings (UID/GID, fsGroup)
+ * - Environment variables from multiple sources (plain, secrets, configmaps)
  */
 
 import { MCPClient, TestFramework, runCommonTests } from '../../framework/src/index.js';

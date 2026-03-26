@@ -70,10 +70,9 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Environment variables from multiple ConfigMaps
 - ✅ All sources (plain, Secret, ConfigMap) work simultaneously
 
-### Security & Resources
+### Security
 - ✅ Security context UID/GID correct
 - ✅ fsGroup applied to mounted files
-- ✅ Resource limits and requests applied
 
 ## Advantages
 
