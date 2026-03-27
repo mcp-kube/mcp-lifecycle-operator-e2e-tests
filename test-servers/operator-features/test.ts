@@ -141,6 +141,84 @@ async function main() {
         test.assert(data.entries.length > 0, 'Directory should contain files');
       });
 
+      // ----- Config: Storage (Selective Key Projection) -----
+
+      // Test: Verify projected secret directory structure
+      await test('projected secret has custom directory structure', async () => {
+        const result = await client.callTool('list_directory', { path: '/projected-secret' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.error === null, 'Directory should exist');
+        const fileNames = data.entries.map((e: any) => e.name);
+        // Should have the custom subdirectory
+        test.assert(fileNames.includes('custom'), 'Should have custom subdirectory');
+        // Should NOT have the original key names at root
+        test.assert(!fileNames.includes('key-to-project-1'), 'Should not have key-to-project-1 at root');
+        test.assert(!fileNames.includes('key-not-projected'), 'Should not have excluded key');
+      });
+
+      // Test: Verify projected secret files at custom paths
+      await test('projected secret files exist at custom paths', async () => {
+        const file1Result = await client.callTool('check_file_exists', { path: '/projected-secret/custom/path/secret-file-1.txt' });
+        const file1Data = JSON.parse(file1Result.content[0].text);
+        test.assert(file1Data.exists, 'custom/path/secret-file-1.txt should exist');
+        test.assertEqual(file1Data.content.trim(), 'projected-secret-value-1', 'Content should match');
+
+        const file2Result = await client.callTool('check_file_exists', { path: '/projected-secret/custom/path/secret-file-2.txt' });
+        const file2Data = JSON.parse(file2Result.content[0].text);
+        test.assert(file2Data.exists, 'custom/path/secret-file-2.txt should exist');
+        test.assertEqual(file2Data.content.trim(), 'projected-secret-value-2', 'Content should match');
+      });
+
+      // Test: Verify excluded keys are not present
+      await test('excluded secret keys are not mounted', async () => {
+        const excludedResult = await client.callTool('check_file_exists', { path: '/projected-secret/key-not-projected' });
+        const excludedData = JSON.parse(excludedResult.content[0].text);
+        test.assert(!excludedData.exists, 'Excluded key should not be mounted');
+
+        const anotherExcludedResult = await client.callTool('check_file_exists', { path: '/projected-secret/another-excluded-key' });
+        const anotherExcludedData = JSON.parse(anotherExcludedResult.content[0].text);
+        test.assert(!anotherExcludedData.exists, 'Another excluded key should not be mounted');
+      });
+
+      // Test: Verify projected configmap directory structure
+      await test('projected configmap has custom directory structure', async () => {
+        const result = await client.callTool('list_directory', { path: '/projected-configmap' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.error === null, 'Directory should exist');
+        const fileNames = data.entries.map((e: any) => e.name);
+        // Should have the custom subdirectory
+        test.assert(fileNames.includes('custom'), 'Should have custom subdirectory');
+        // Should NOT have the original key names at root
+        test.assert(!fileNames.includes('key-to-project-1'), 'Should not have key-to-project-1 at root');
+        test.assert(!fileNames.includes('key-not-projected'), 'Should not have excluded key');
+      });
+
+      // Test: Verify projected configmap files at custom paths
+      await test('projected configmap files exist at custom paths', async () => {
+        const file1Result = await client.callTool('check_file_exists', { path: '/projected-configmap/custom/path/configmap-file-1.conf' });
+        const file1Data = JSON.parse(file1Result.content[0].text);
+        test.assert(file1Data.exists, 'custom/path/configmap-file-1.conf should exist');
+        test.assertEqual(file1Data.content.trim(), 'projected-configmap-value-1', 'Content should match');
+
+        const file2Result = await client.callTool('check_file_exists', { path: '/projected-configmap/custom/path/configmap-file-2.conf' });
+        const file2Data = JSON.parse(file2Result.content[0].text);
+        test.assert(file2Data.exists, 'custom/path/configmap-file-2.conf should exist');
+        test.assertEqual(file2Data.content.trim(), 'projected-configmap-value-2', 'Content should match');
+      });
+
+      // Test: Verify excluded configmap keys are not present
+      await test('excluded configmap keys are not mounted', async () => {
+        const excludedResult = await client.callTool('check_file_exists', { path: '/projected-configmap/key-not-projected' });
+        const excludedData = JSON.parse(excludedResult.content[0].text);
+        test.assert(!excludedData.exists, 'Excluded key should not be mounted');
+
+        const anotherExcludedResult = await client.callTool('check_file_exists', { path: '/projected-configmap/another-excluded-key' });
+        const anotherExcludedData = JSON.parse(anotherExcludedResult.content[0].text);
+        test.assert(!anotherExcludedData.exists, 'Another excluded key should not be mounted');
+      });
+
       // ----- Config: Environment Variables -----
 
       // Test: Verify plain environment variable

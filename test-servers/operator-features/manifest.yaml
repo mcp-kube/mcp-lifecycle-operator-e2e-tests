@@ -106,6 +106,31 @@ data:
     This directory is mounted with ReadWrite permissions.
     The MCP server should be able to create, modify, and delete files here.
 ---
+# Secret #5: Used for selective key projection (items)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-for-projection
+  namespace: default
+type: Opaque
+stringData:
+  key-to-project-1: "projected-secret-value-1"
+  key-to-project-2: "projected-secret-value-2"
+  key-not-projected: "this-should-not-appear"
+  another-excluded-key: "this-should-also-not-appear"
+---
+# ConfigMap #6: Used for selective key projection (items)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-projection
+  namespace: default
+data:
+  key-to-project-1: "projected-configmap-value-1"
+  key-to-project-2: "projected-configmap-value-2"
+  key-not-projected: "this-should-not-appear"
+  another-excluded-key: "this-should-also-not-appear"
+---
 # MCPServer with multiple ConfigMaps and Secrets
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
@@ -157,6 +182,38 @@ spec:
           type: ConfigMap
           configMap:
             name: configmap-for-writable-mount
+
+      # Mount Secret #5 with selective key projection (items)
+      - path: /projected-secret
+        permissions: ReadOnly
+        source:
+          type: Secret
+          secret:
+            secretName: secret-for-projection
+            items:
+              # Project first key to custom path
+              - key: key-to-project-1
+                path: custom/path/secret-file-1.txt
+              # Project second key to custom path
+              - key: key-to-project-2
+                path: custom/path/secret-file-2.txt
+              # Note: key-not-projected and another-excluded-key should NOT appear
+
+      # Mount ConfigMap #6 with selective key projection (items)
+      - path: /projected-configmap
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: configmap-for-projection
+            items:
+              # Project first key to custom path
+              - key: key-to-project-1
+                path: custom/path/configmap-file-1.conf
+              # Project second key to custom path
+              - key: key-to-project-2
+                path: custom/path/configmap-file-2.conf
+              # Note: key-not-projected and another-excluded-key should NOT appear
 
     # Environment variables from multiple sources
     env:

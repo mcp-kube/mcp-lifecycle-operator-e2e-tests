@@ -40,6 +40,15 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - Tests verify the operator correctly processes the ReadWrite permission setting
   - Actual filesystem writes are not possible due to Kubernetes limitations
 
+- **Selective key projection (items)**:
+  - **Secret projection**: `secret-for-projection` mounted at `/projected-secret`
+    - Projects only 2 out of 4 keys to custom paths (`custom/path/secret-file-1.txt`, `custom/path/secret-file-2.txt`)
+    - Excludes `key-not-projected` and `another-excluded-key`
+  - **ConfigMap projection**: `configmap-for-projection` mounted at `/projected-configmap`
+    - Projects only 2 out of 4 keys to custom paths (`custom/path/configmap-file-1.conf`, `custom/path/configmap-file-2.conf`)
+    - Excludes `key-not-projected` and `another-excluded-key`
+  - Tests verify only specified keys are mounted at custom paths, excluded keys are not present
+
 ### Environment Variables
 - **Environment variables from multiple sources**:
   - Plain environment variable: `plain_env_var`
@@ -92,6 +101,9 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ ConfigMap files readable with correct contents
 - ✅ Operator correctly processes ReadWrite permission (mount configured without readOnly flag)
 - ℹ️  ConfigMap/Secret volumes are inherently read-only in Kubernetes (platform limitation)
+- ✅ Selective key projection - only specified keys are mounted
+- ✅ Keys projected to custom paths (not default filenames)
+- ✅ Excluded keys are not present in mounted volume
 
 ### Environment Variables
 - ✅ Plain environment variables work
