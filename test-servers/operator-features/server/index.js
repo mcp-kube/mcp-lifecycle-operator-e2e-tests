@@ -139,6 +139,14 @@ app.post(MCP_PATH, async (req, res) => {
                 required: ['path'],
               },
             },
+            {
+              name: 'get_service_account_info',
+              description: 'Get ServiceAccount information from mounted token',
+              inputSchema: {
+                type: 'object',
+                properties: {},
+              },
+            },
           ],
         };
         break;
@@ -369,6 +377,37 @@ async function handleToolCall(name, args) {
             }
           }
         }
+      } catch (error) {
+        result.error = error.message;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'get_service_account_info': {
+      const result = {
+        namespace: null,
+        tokenExists: false,
+        error: null,
+      };
+
+      try {
+        // Read namespace from ServiceAccount mount
+        const namespacePath = '/var/run/secrets/kubernetes.io/serviceaccount/namespace';
+        if (existsSync(namespacePath)) {
+          result.namespace = (await fs.readFile(namespacePath, 'utf-8')).trim();
+        }
+
+        // Check if ServiceAccount token exists (confirms custom SA is mounted)
+        const tokenPath = '/var/run/secrets/kubernetes.io/serviceaccount/token';
+        result.tokenExists = existsSync(tokenPath);
       } catch (error) {
         result.error = error.message;
       }

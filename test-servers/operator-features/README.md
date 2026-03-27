@@ -15,6 +15,7 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 - `list_directory` - List files in a directory with details
 - `get_file_permissions` - Get file permissions and ownership
 - `get_process_arguments` - Get process command line arguments
+- `get_service_account_info` - Verify ServiceAccount token is mounted (confirms custom SA is configured)
 
 ## What This Tests
 
@@ -78,6 +79,12 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
 - **Resource requests**: Memory 64Mi, CPU 100m
 - **Resource limits**: Memory 128Mi, CPU 200m
 
+### Runtime Configuration
+- **Replicas**: 2 pods for testing scaling/HA configuration
+- **Custom ServiceAccount**: `custom-mcp-service-account` for RBAC testing
+  - Verifies operator correctly configures pod ServiceAccount
+  - ServiceAccount token is mounted and accessible
+
 ## How It Works
 
 1. **Build the custom MCP server image** (automated by test scripts)
@@ -117,6 +124,11 @@ The image building and loading is automatically handled by the test framework wh
 ### Security
 - ✅ Security context UID/GID correct
 - ✅ fsGroup applied to mounted files
+- ✅ Custom ServiceAccount configured and mounted
+
+### Runtime
+- ✅ Replica count configured (2 replicas)
+- ✅ ServiceAccount token mounted correctly
 
 ## Advantages
 

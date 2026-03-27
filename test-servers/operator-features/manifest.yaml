@@ -131,6 +131,13 @@ data:
   key-not-projected: "this-should-not-appear"
   another-excluded-key: "this-should-also-not-appear"
 ---
+# ServiceAccount: Custom service account for testing runtime.security.serviceAccountName
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: custom-mcp-service-account
+  namespace: default
+---
 # MCPServer with multiple ConfigMaps and Secrets
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
@@ -280,8 +287,14 @@ spec:
           name: configmap-for-envfrom-prefix
 
   runtime:
+    # Replicas: Number of pod replicas for scaling/HA
+    replicas: 2
+
     # Security context settings
     security:
+      # Custom ServiceAccount for RBAC testing
+      serviceAccountName: custom-mcp-service-account
+
       # Pod-level security context
       podSecurityContext:
         runAsUser: 1000
