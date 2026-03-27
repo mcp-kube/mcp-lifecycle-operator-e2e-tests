@@ -50,6 +50,17 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
     - Excludes `key-not-projected` and `another-excluded-key`
   - Tests verify only specified keys are mounted at custom paths, excluded keys are not present
 
+- **Custom file permissions (defaultMode)**:
+  - **Secret with restrictive permissions**: `secret-for-permissions` mounted at `/secret-with-permissions`
+    - defaultMode: 0400 (read-only by owner)
+    - Use case: Sensitive files like API keys, certificates
+    - Tests verify all files have 0440 permissions (Kubernetes adds group read when fsGroup is set)
+    - **Note**: fsGroup (2000) adds group read permission to secret volumes (documented Kubernetes behavior)
+  - **ConfigMap with executable permissions**: `configmap-for-permissions` mounted at `/configmap-with-permissions`
+    - defaultMode: 0755 (read/execute for all, write for owner)
+    - Use case: Scripts that need to be executable
+    - Tests verify all files have 0755 permissions
+
 ### Environment Variables
 - **Environment variables from multiple sources**:
   - Plain environment variable: `plain_env_var`
@@ -124,6 +135,9 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Selective key projection - only specified keys are mounted
 - ✅ Keys projected to custom paths (not default filenames)
 - ✅ Excluded keys are not present in mounted volume
+- ✅ Custom file permissions (defaultMode) - Secret with 0400, ConfigMap with 0755
+- ✅ All files in volume inherit the specified defaultMode
+- ℹ️  Secret volumes with fsGroup: Kubernetes adds group read permission (0400 → 0440)
 
 ### Environment Variables
 - ✅ Plain environment variables work

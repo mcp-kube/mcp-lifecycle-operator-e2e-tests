@@ -219,6 +219,55 @@ async function main() {
         test.assert(!anotherExcludedData.exists, 'Another excluded key should not be mounted');
       });
 
+      // ----- Storage: DefaultMode (File Permissions) -----
+
+      // Test: Verify secret with custom defaultMode (0400)
+      await test('secret with defaultMode 0400 has correct permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/secret-with-permissions/secret-file-with-custom-mode.txt' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Secret file should exist');
+        // Note: defaultMode 0400 becomes 0440 when fsGroup is set
+        // Kubernetes adds group read permission when fsGroup is applied to secret volumes
+        // See: https://kubernetes.io/docs/concepts/storage/volumes/#secret
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777; // Extract permission bits
+        test.assertEqual(permissionBits, 0o440, 'File should have 0440 permissions (0400 + fsGroup)');
+      });
+
+      // Test: Verify all files in secret mount have the defaultMode
+      await test('all files in secret with defaultMode have correct permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/secret-with-permissions/another-secret-file.conf' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Another secret file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        test.assertEqual(permissionBits, 0o440, 'All files should have 0440 permissions (0400 + fsGroup)');
+      });
+
+      // Test: Verify configmap with custom defaultMode (0755)
+      await test('configmap with defaultMode 0755 has correct permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/configmap-with-permissions/script.sh' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'ConfigMap script should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        test.assertEqual(permissionBits, 0o755, 'Script should have 0755 permissions (executable)');
+      });
+
+      // Test: Verify all files in configmap mount have the defaultMode
+      await test('all files in configmap with defaultMode have correct permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/configmap-with-permissions/config-file.conf' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'ConfigMap config file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        test.assertEqual(permissionBits, 0o755, 'All files should have 0755 permissions (defaultMode)');
+      });
+
       // ----- Config: Environment Variables -----
 
       // Test: Verify plain environment variable

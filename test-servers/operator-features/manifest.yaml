@@ -131,6 +131,31 @@ data:
   key-not-projected: "this-should-not-appear"
   another-excluded-key: "this-should-also-not-appear"
 ---
+# Secret #7: Used for testing defaultMode (file permissions)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-for-permissions
+  namespace: default
+type: Opaque
+stringData:
+  secret-file-with-custom-mode.txt: "secret-content-with-0400-permissions"
+  another-secret-file.conf: "another-secret-content"
+---
+# ConfigMap #7: Used for testing defaultMode (file permissions)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-permissions
+  namespace: default
+data:
+  script.sh: |
+    #!/bin/bash
+    echo "This is a script with 0755 permissions"
+  config-file.conf: |
+    # Configuration file
+    setting=value
+---
 # ServiceAccount: Custom service account for testing runtime.security.serviceAccountName
 apiVersion: v1
 kind: ServiceAccount
@@ -221,6 +246,24 @@ spec:
               - key: key-to-project-2
                 path: custom/path/configmap-file-2.conf
               # Note: key-not-projected and another-excluded-key should NOT appear
+
+      # Mount Secret #7 with custom defaultMode (0400 - read-only by owner)
+      - path: /secret-with-permissions
+        permissions: ReadOnly
+        source:
+          type: Secret
+          secret:
+            secretName: secret-for-permissions
+            defaultMode: 0400
+
+      # Mount ConfigMap #7 with custom defaultMode (0755 - executable)
+      - path: /configmap-with-permissions
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: configmap-for-permissions
+            defaultMode: 0755
 
     # Environment variables from multiple sources
     env:
