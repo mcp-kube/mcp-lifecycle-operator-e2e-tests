@@ -31,6 +31,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         // Verify expected arguments are present
+        console.log(`    Process arguments: ${data.args.join(' ')}`);
         test.assert(data.args.includes('--verbose'), 'Should have --verbose argument');
         test.assert(data.args.includes('--feature-flag'), 'Should have --feature-flag argument');
         test.assert(data.args.includes('test-mode'), 'Should have test-mode argument');
@@ -45,6 +46,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         // Verify the custom path argument is present
+        console.log(`    Custom MCP path argument found: ${data.args.find((a: string) => a.includes('--mcp-path='))}`);
         test.assert(data.args.includes('--mcp-path=/custom/test/path'), 'Should have --mcp-path=/custom/test/path argument');
       });
 
@@ -60,6 +62,7 @@ async function main() {
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
+        console.log(`    Directory /mounted-secret contains ${fileNames.length} files: ${fileNames.join(', ')}`);
         test.assert(fileNames.includes('mounted-secret-file-1.txt'), 'Should have mounted-secret-file-1.txt');
         test.assert(fileNames.includes('mounted-secret-file-2.txt'), 'Should have mounted-secret-file-2.txt');
         test.assert(fileNames.includes('mounted-secret-config.json'), 'Should have mounted-secret-config.json');
@@ -71,10 +74,12 @@ async function main() {
         const file1Data = JSON.parse(file1Result.content[0].text);
 
         test.assert(file1Data.exists, 'mounted-secret-file-1.txt should exist');
+        console.log(`    File /mounted-secret/mounted-secret-file-1.txt exists with content: "${file1Data.content.trim()}"`);
         test.assertEqual(file1Data.content.trim(), 'content-from-mounted-secret-file-1', 'Content should match');
 
         const configResult = await client.callTool('check_file_exists', { path: '/mounted-secret/mounted-secret-config.json' });
         const configData = JSON.parse(configResult.content[0].text);
+        console.log(`    File /mounted-secret/mounted-secret-config.json contains JSON with key "value-from-mounted-secret"`);
         test.assert(configData.content.includes('value-from-mounted-secret'), 'Config should have expected value');
       });
 
@@ -85,6 +90,7 @@ async function main() {
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
+        console.log(`    Directory /mounted-configmap contains ${fileNames.length} files: ${fileNames.join(', ')}`);
         test.assert(fileNames.includes('mounted-configmap-file-1.conf'), 'Should have mounted-configmap-file-1.conf');
         test.assert(fileNames.includes('mounted-configmap-file-2.yaml'), 'Should have mounted-configmap-file-2.yaml');
       });
@@ -95,10 +101,12 @@ async function main() {
         const confData = JSON.parse(confResult.content[0].text);
 
         test.assert(confData.exists, 'mounted-configmap-file-1.conf should exist');
+        console.log(`    File /mounted-configmap/mounted-configmap-file-1.conf contains: "${confData.content.substring(0, 50)}..."`);
         test.assert(confData.content.includes('value-from-mounted-configmap'), 'Config should have expected value');
 
         const yamlResult = await client.callTool('check_file_exists', { path: '/mounted-configmap/mounted-configmap-file-2.yaml' });
         const yamlData = JSON.parse(yamlResult.content[0].text);
+        console.log(`    File /mounted-configmap/mounted-configmap-file-2.yaml contains YAML with "from-mounted-configmap"`);
         test.assert(yamlData.content.includes('from-mounted-configmap'), 'YAML should have expected value');
       });
 
@@ -111,6 +119,7 @@ async function main() {
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
+        console.log(`    Directory /writable-directory contains ${fileNames.length} files: ${fileNames.join(', ')}`);
         test.assert(fileNames.includes('initial-file.txt'), 'Should have initial-file.txt');
         test.assert(fileNames.includes('readme.txt'), 'Should have readme.txt');
       });
@@ -121,6 +130,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.exists, 'initial-file.txt should exist');
+        console.log(`    File /writable-directory/initial-file.txt contains: "${data.content.trim()}"`);
         test.assertEqual(data.content.trim(), 'initial-content-in-writable-directory', 'Content should match');
       });
 
@@ -137,6 +147,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         // Verify directory is accessible
+        console.log(`    ReadWrite directory accessible with ${data.entries.length} files (operator configured mount correctly)`);
         test.assert(data.error === null, 'Directory should be accessible');
         test.assert(data.entries.length > 0, 'Directory should contain files');
       });
@@ -150,6 +161,7 @@ async function main() {
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
+        console.log(`    Directory /projected-secret contains: ${fileNames.join(', ')}`);
         // Should have the custom subdirectory
         test.assert(fileNames.includes('custom'), 'Should have custom subdirectory');
         // Should NOT have the original key names at root
@@ -162,6 +174,7 @@ async function main() {
         const file1Result = await client.callTool('check_file_exists', { path: '/projected-secret/custom/path/secret-file-1.txt' });
         const file1Data = JSON.parse(file1Result.content[0].text);
         test.assert(file1Data.exists, 'custom/path/secret-file-1.txt should exist');
+        console.log(`    Projected secret file custom/path/secret-file-1.txt = "${file1Data.content.trim()}"`);
         test.assertEqual(file1Data.content.trim(), 'projected-secret-value-1', 'Content should match');
 
         const file2Result = await client.callTool('check_file_exists', { path: '/projected-secret/custom/path/secret-file-2.txt' });
@@ -174,6 +187,7 @@ async function main() {
       await test('excluded secret keys are not mounted', async () => {
         const excludedResult = await client.callTool('check_file_exists', { path: '/projected-secret/key-not-projected' });
         const excludedData = JSON.parse(excludedResult.content[0].text);
+        console.log(`    Excluded key key-not-projected exists: ${excludedData.exists} (should be false)`);
         test.assert(!excludedData.exists, 'Excluded key should not be mounted');
 
         const anotherExcludedResult = await client.callTool('check_file_exists', { path: '/projected-secret/another-excluded-key' });
@@ -188,6 +202,7 @@ async function main() {
 
         test.assert(data.error === null, 'Directory should exist');
         const fileNames = data.entries.map((e: any) => e.name);
+        console.log(`    Directory /projected-configmap contains: ${fileNames.join(', ')}`);
         // Should have the custom subdirectory
         test.assert(fileNames.includes('custom'), 'Should have custom subdirectory');
         // Should NOT have the original key names at root
@@ -200,6 +215,7 @@ async function main() {
         const file1Result = await client.callTool('check_file_exists', { path: '/projected-configmap/custom/path/configmap-file-1.conf' });
         const file1Data = JSON.parse(file1Result.content[0].text);
         test.assert(file1Data.exists, 'custom/path/configmap-file-1.conf should exist');
+        console.log(`    Projected configmap file custom/path/configmap-file-1.conf = "${file1Data.content.trim()}"`);
         test.assertEqual(file1Data.content.trim(), 'projected-configmap-value-1', 'Content should match');
 
         const file2Result = await client.callTool('check_file_exists', { path: '/projected-configmap/custom/path/configmap-file-2.conf' });
@@ -212,6 +228,7 @@ async function main() {
       await test('excluded configmap keys are not mounted', async () => {
         const excludedResult = await client.callTool('check_file_exists', { path: '/projected-configmap/key-not-projected' });
         const excludedData = JSON.parse(excludedResult.content[0].text);
+        console.log(`    Excluded configmap key key-not-projected exists: ${excludedData.exists} (should be false)`);
         test.assert(!excludedData.exists, 'Excluded key should not be mounted');
 
         const anotherExcludedResult = await client.callTool('check_file_exists', { path: '/projected-configmap/another-excluded-key' });
@@ -232,6 +249,7 @@ async function main() {
         // See: https://kubernetes.io/docs/concepts/storage/volumes/#secret
         const mode = parseInt(data.permissions.mode, 8);
         const permissionBits = mode & 0o777; // Extract permission bits
+        console.log(`    File /secret-with-permissions/secret-file-with-custom-mode.txt has permissions: 0${permissionBits.toString(8)} (mode: ${data.permissions.mode})`);
         test.assertEqual(permissionBits, 0o440, 'File should have 0440 permissions (0400 + fsGroup)');
       });
 
@@ -243,6 +261,7 @@ async function main() {
         test.assert(data.exists, 'Another secret file should exist');
         const mode = parseInt(data.permissions.mode, 8);
         const permissionBits = mode & 0o777;
+        console.log(`    File /secret-with-permissions/another-secret-file.conf has permissions: 0${permissionBits.toString(8)} (defaultMode applies to all files)`);
         test.assertEqual(permissionBits, 0o440, 'All files should have 0440 permissions (0400 + fsGroup)');
       });
 
@@ -254,6 +273,7 @@ async function main() {
         test.assert(data.exists, 'ConfigMap script should exist');
         const mode = parseInt(data.permissions.mode, 8);
         const permissionBits = mode & 0o777;
+        console.log(`    File /configmap-with-permissions/script.sh has permissions: 0${permissionBits.toString(8)} (executable)`);
         test.assertEqual(permissionBits, 0o755, 'Script should have 0755 permissions (executable)');
       });
 
@@ -265,6 +285,7 @@ async function main() {
         test.assert(data.exists, 'ConfigMap config file should exist');
         const mode = parseInt(data.permissions.mode, 8);
         const permissionBits = mode & 0o777;
+        console.log(`    File /configmap-with-permissions/config-file.conf has permissions: 0${permissionBits.toString(8)} (defaultMode applies to all files)`);
         test.assertEqual(permissionBits, 0o755, 'All files should have 0755 permissions (defaultMode)');
       });
 
@@ -276,6 +297,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.exists, 'plain_env_var should exist');
+        console.log(`    Environment variable plain_env_var = "${data.value}"`);
         test.assertEqual(data.value, 'plain-env-var-value', 'Value should match');
       });
 
@@ -285,6 +307,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.exists, 'env_var_from_mounted_secret_key_1 should exist');
+        console.log(`    Environment variable env_var_from_mounted_secret_key_1 = "${data.value}"`);
         test.assertEqual(data.value, 'content-from-mounted-secret-file-1', 'Value should match mounted file content');
       });
 
@@ -293,6 +316,7 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'env_var_from_secret_key_1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'env_var_from_secret_key_1 should exist');
+        console.log(`    Environment variable env_var_from_secret_key_1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'env-var-value-from-secret-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'env_var_from_secret_key_2' });
@@ -307,6 +331,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.exists, 'env_var_from_mounted_configmap_key_1 should exist');
+        console.log(`    Environment variable env_var_from_mounted_configmap_key_1 contains: "...${data.value.substring(0, 30)}..."`);
         test.assert(data.value.includes('value-from-mounted-configmap'), 'Value should include expected content');
       });
 
@@ -315,6 +340,7 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'env_var_from_configmap_key_1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'env_var_from_configmap_key_1 should exist');
+        console.log(`    Environment variable env_var_from_configmap_key_1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'env-var-value-from-configmap-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'env_var_from_configmap_key_2' });
@@ -330,6 +356,7 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'envfrom-secret-key-1 should exist');
+        console.log(`    EnvFrom secret (no prefix): envfrom-secret-key-1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'envfrom-secret-value-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-2' });
@@ -340,6 +367,7 @@ async function main() {
         const key3Result = await client.callTool('get_env_var', { name: 'envfrom-secret-key-3' });
         const key3Data = JSON.parse(key3Result.content[0].text);
         test.assert(key3Data.exists, 'envfrom-secret-key-3 should exist');
+        console.log(`    All 3 keys from envFrom secret injected (key-3 = "${key3Data.value}")`);
         test.assertEqual(key3Data.value, 'envfrom-secret-value-3', 'Value should match');
       });
 
@@ -348,11 +376,13 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-secret-key-1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'PREFIX_prefixed-secret-key-1 should exist');
+        console.log(`    EnvFrom secret (with prefix): PREFIX_prefixed-secret-key-1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'prefixed-secret-value-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-secret-key-2' });
         const key2Data = JSON.parse(key2Result.content[0].text);
         test.assert(key2Data.exists, 'PREFIX_prefixed-secret-key-2 should exist');
+        console.log(`    Prefix applied: PREFIX_prefixed-secret-key-2 = "${key2Data.value}"`);
         test.assertEqual(key2Data.value, 'prefixed-secret-value-2', 'Value should match');
       });
 
@@ -361,6 +391,7 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'envfrom-configmap-key-1 should exist');
+        console.log(`    EnvFrom configmap (no prefix): envfrom-configmap-key-1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'envfrom-configmap-value-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-2' });
@@ -371,6 +402,7 @@ async function main() {
         const key3Result = await client.callTool('get_env_var', { name: 'envfrom-configmap-key-3' });
         const key3Data = JSON.parse(key3Result.content[0].text);
         test.assert(key3Data.exists, 'envfrom-configmap-key-3 should exist');
+        console.log(`    All 3 keys from envFrom configmap injected (key-3 = "${key3Data.value}")`);
         test.assertEqual(key3Data.value, 'envfrom-configmap-value-3', 'Value should match');
       });
 
@@ -379,6 +411,7 @@ async function main() {
         const key1Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-configmap-key-1' });
         const key1Data = JSON.parse(key1Result.content[0].text);
         test.assert(key1Data.exists, 'PREFIX_prefixed-configmap-key-1 should exist');
+        console.log(`    EnvFrom configmap (with prefix): PREFIX_prefixed-configmap-key-1 = "${key1Data.value}"`);
         test.assertEqual(key1Data.value, 'prefixed-configmap-value-1', 'Value should match');
 
         const key2Result = await client.callTool('get_env_var', { name: 'PREFIX_prefixed-configmap-key-2' });
@@ -394,6 +427,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_name' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_field_pod_name should exist');
+        console.log(`    Pod name from fieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'Pod name should not be empty');
         test.assert(data.value.startsWith('operator-features-'), 'Pod name should start with operator-features-');
       });
@@ -403,6 +437,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_namespace' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_field_pod_namespace should exist');
+        console.log(`    Namespace from fieldRef: ${data.value}`);
         test.assertEqual(data.value, 'default', 'Namespace should be default');
       });
 
@@ -411,6 +446,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_ip' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_field_pod_ip should exist');
+        console.log(`    Pod IP from fieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'Pod IP should not be empty');
         // Basic IP validation (should contain dots)
         test.assert(data.value.includes('.'), 'Pod IP should be a valid IP address');
@@ -421,6 +457,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_field_node_name' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_field_node_name should exist');
+        console.log(`    Node name from fieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'Node name should not be empty');
       });
 
@@ -429,6 +466,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_field_service_account' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_field_service_account should exist');
+        console.log(`    ServiceAccount from fieldRef: ${data.value}`);
         test.assertEqual(data.value, 'custom-mcp-service-account', 'ServiceAccount should be custom-mcp-service-account');
       });
 
@@ -439,6 +477,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_limits_cpu' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_resource_limits_cpu should exist');
+        console.log(`    CPU limit from resourceFieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'CPU limit should not be empty');
         // The value might be in different formats (e.g., "1" for 1 CPU or "200m" for 200 millicores)
       });
@@ -448,6 +487,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_limits_memory' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_resource_limits_memory should exist');
+        console.log(`    Memory limit from resourceFieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'Memory limit should not be empty');
       });
 
@@ -456,6 +496,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_requests_cpu' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_resource_requests_cpu should exist');
+        console.log(`    CPU request from resourceFieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'CPU request should not be empty');
       });
 
@@ -464,6 +505,7 @@ async function main() {
         const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_requests_memory' });
         const data = JSON.parse(result.content[0].text);
         test.assert(data.exists, 'env_var_from_resource_requests_memory should exist');
+        console.log(`    Memory request from resourceFieldRef: ${data.value}`);
         test.assert(data.value !== null && data.value.length > 0, 'Memory request should not be empty');
       });
 
@@ -474,6 +516,7 @@ async function main() {
         const result = await client.callTool('check_user_id', {});
         const data = JSON.parse(result.content[0].text);
 
+        console.log(`    Security context: UID=${data.uid}, GID=${data.gid}, groups=[${data.groups.join(', ')}]`);
         test.assertEqual(data.uid, 1000, 'UID should be 1000');
         test.assertEqual(data.gid, 3000, 'GID should be 3000');
         test.assert(data.groups.includes(2000), 'Should be in group 2000 (fsGroup)');
@@ -485,6 +528,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         test.assert(data.exists, '/mounted-secret should exist');
+        console.log(`    Directory /mounted-secret GID: ${data.permissions.gid} (fsGroup should be 2000)`);
         test.assertEqual(data.permissions.gid, 2000, 'fsGroup should be 2000');
       });
 
@@ -496,6 +540,7 @@ async function main() {
         const data = JSON.parse(result.content[0].text);
 
         // Verify ServiceAccount token is mounted (confirms custom SA is configured)
+        console.log(`    ServiceAccount: tokenExists=${data.tokenExists}, namespace=${data.namespace}`);
         test.assert(data.tokenExists === true, 'ServiceAccount token should be mounted');
         test.assert(data.namespace === 'default', 'Namespace should be default');
         test.assert(data.error === null, 'Should not have errors reading SA info');
