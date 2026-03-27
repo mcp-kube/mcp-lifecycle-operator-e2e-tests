@@ -266,6 +266,46 @@ spec:
             name: configmap-for-env-vars
             key: env-var-key-2
 
+      # From fieldRef - accessing pod metadata
+      - name: env_var_from_field_pod_name
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: env_var_from_field_pod_namespace
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: env_var_from_field_pod_ip
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+      - name: env_var_from_field_node_name
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.nodeName
+      - name: env_var_from_field_service_account
+        valueFrom:
+          fieldRef:
+            fieldPath: spec.serviceAccountName
+
+      # From resourceFieldRef - accessing resource limits/requests
+      - name: env_var_from_resource_limits_cpu
+        valueFrom:
+          resourceFieldRef:
+            resource: limits.cpu
+      - name: env_var_from_resource_limits_memory
+        valueFrom:
+          resourceFieldRef:
+            resource: limits.memory
+      - name: env_var_from_resource_requests_cpu
+        valueFrom:
+          resourceFieldRef:
+            resource: requests.cpu
+      - name: env_var_from_resource_requests_memory
+        valueFrom:
+          resourceFieldRef:
+            resource: requests.memory
+
     # Environment variables from envFrom (bulk injection)
     envFrom:
       # From Secret #3 (secret-for-envfrom) - all keys become env vars without prefix

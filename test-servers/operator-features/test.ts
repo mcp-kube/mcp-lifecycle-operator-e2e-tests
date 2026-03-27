@@ -338,6 +338,86 @@ async function main() {
         test.assertEqual(key2Data.value, 'prefixed-configmap-value-2', 'Value should match');
       });
 
+      // ----- Config: Environment Variables from fieldRef -----
+
+      // Test: Environment variable from fieldRef - pod name
+      await test('env var from fieldRef pod name is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_name' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_field_pod_name should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'Pod name should not be empty');
+        test.assert(data.value.startsWith('operator-features-'), 'Pod name should start with operator-features-');
+      });
+
+      // Test: Environment variable from fieldRef - pod namespace
+      await test('env var from fieldRef namespace is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_namespace' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_field_pod_namespace should exist');
+        test.assertEqual(data.value, 'default', 'Namespace should be default');
+      });
+
+      // Test: Environment variable from fieldRef - pod IP
+      await test('env var from fieldRef pod IP is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_field_pod_ip' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_field_pod_ip should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'Pod IP should not be empty');
+        // Basic IP validation (should contain dots)
+        test.assert(data.value.includes('.'), 'Pod IP should be a valid IP address');
+      });
+
+      // Test: Environment variable from fieldRef - node name
+      await test('env var from fieldRef node name is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_field_node_name' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_field_node_name should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'Node name should not be empty');
+      });
+
+      // Test: Environment variable from fieldRef - service account
+      await test('env var from fieldRef service account is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_field_service_account' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_field_service_account should exist');
+        test.assertEqual(data.value, 'custom-mcp-service-account', 'ServiceAccount should be custom-mcp-service-account');
+      });
+
+      // ----- Config: Environment Variables from resourceFieldRef -----
+
+      // Test: Environment variable from resourceFieldRef - CPU limit
+      await test('env var from resourceFieldRef CPU limit is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_limits_cpu' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_resource_limits_cpu should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'CPU limit should not be empty');
+        // The value might be in different formats (e.g., "1" for 1 CPU or "200m" for 200 millicores)
+      });
+
+      // Test: Environment variable from resourceFieldRef - memory limit
+      await test('env var from resourceFieldRef memory limit is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_limits_memory' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_resource_limits_memory should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'Memory limit should not be empty');
+      });
+
+      // Test: Environment variable from resourceFieldRef - CPU request
+      await test('env var from resourceFieldRef CPU request is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_requests_cpu' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_resource_requests_cpu should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'CPU request should not be empty');
+      });
+
+      // Test: Environment variable from resourceFieldRef - memory request
+      await test('env var from resourceFieldRef memory request is set', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_requests_memory' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_resource_requests_memory should exist');
+        test.assert(data.value !== null && data.value.length > 0, 'Memory request should not be empty');
+      });
+
       // ----- Config: Security -----
 
       // Test: Verify security context (user/group IDs)

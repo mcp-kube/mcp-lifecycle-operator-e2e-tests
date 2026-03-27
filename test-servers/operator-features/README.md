@@ -64,6 +64,19 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - From configmap without prefix: `envfrom-configmap-key-1`, `envfrom-configmap-key-2`, `envfrom-configmap-key-3`
   - From configmap with prefix: `PREFIX_prefixed-configmap-key-1`, `PREFIX_prefixed-configmap-key-2`
 
+- **Environment variables from fieldRef (pod metadata)**:
+  - Pod name: `env_var_from_field_pod_name` (from `metadata.name`)
+  - Pod namespace: `env_var_from_field_pod_namespace` (from `metadata.namespace`)
+  - Pod IP: `env_var_from_field_pod_ip` (from `status.podIP`)
+  - Node name: `env_var_from_field_node_name` (from `spec.nodeName`)
+  - ServiceAccount: `env_var_from_field_service_account` (from `spec.serviceAccountName`)
+
+- **Environment variables from resourceFieldRef (resource limits/requests)**:
+  - CPU limit: `env_var_from_resource_limits_cpu` (from `limits.cpu`)
+  - Memory limit: `env_var_from_resource_limits_memory` (from `limits.memory`)
+  - CPU request: `env_var_from_resource_requests_cpu` (from `requests.cpu`)
+  - Memory request: `env_var_from_resource_requests_memory` (from `requests.memory`)
+
 ### Security Features
 - **Security context**:
   - `runAsUser: 1000`
@@ -120,6 +133,10 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Bulk injection via envFrom (with and without prefix)
 - ✅ EnvFrom from Secrets (with and without prefix)
 - ✅ EnvFrom from ConfigMaps (with and without prefix)
+- ✅ Environment variables from fieldRef (pod metadata)
+- ✅ Pod name, namespace, IP, node name, and ServiceAccount accessible via fieldRef
+- ✅ Environment variables from resourceFieldRef (resource limits/requests)
+- ✅ CPU and memory limits/requests accessible via resourceFieldRef
 
 ### Security
 - ✅ Security context UID/GID correct
