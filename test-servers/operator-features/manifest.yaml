@@ -265,6 +265,30 @@ spec:
             name: configmap-for-permissions
             defaultMode: 0755
 
+      # EmptyDir #1: Default medium (disk-backed) with ReadWrite permissions
+      - path: /emptydir-default
+        permissions: ReadWrite
+        source:
+          type: EmptyDir
+          emptyDir: {}
+
+      # EmptyDir #2: Memory medium (tmpfs) with size limit
+      - path: /emptydir-memory
+        permissions: ReadWrite
+        source:
+          type: EmptyDir
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+
+      # EmptyDir #3: Disk-backed with size limit
+      - path: /emptydir-with-size
+        permissions: ReadWrite
+        source:
+          type: EmptyDir
+          emptyDir:
+            sizeLimit: 128Mi
+
     # Environment variables from multiple sources
     env:
       # Plain environment variable

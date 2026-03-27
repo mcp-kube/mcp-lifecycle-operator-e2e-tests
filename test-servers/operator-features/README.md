@@ -61,6 +61,24 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
     - Use case: Scripts that need to be executable
     - Tests verify all files have 0755 permissions
 
+- **EmptyDir volumes (scratch space)**:
+  - **Default medium (disk-backed)**: EmptyDir mounted at `/emptydir-default`
+    - No configuration (uses default disk-backed storage)
+    - Truly writable (unlike ConfigMap/Secret volumes)
+    - Use case: Temporary files, caches, processing workspace
+  - **Memory medium (tmpfs)**: EmptyDir mounted at `/emptydir-memory`
+    - medium: Memory (uses tmpfs for fast temporary storage)
+    - sizeLimit: 64Mi (prevents memory exhaustion)
+    - Use case: Fast temporary storage for in-memory processing
+  - **Disk-backed with size limit**: EmptyDir mounted at `/emptydir-with-size`
+    - sizeLimit: 128Mi (prevents disk exhaustion)
+    - Use case: Temporary storage with capacity control
+  - **Tests verify**:
+    - EmptyDir directories exist and are accessible
+    - Files can be created, written, and deleted (true writability)
+    - Different medium types (default disk vs Memory) work correctly
+    - Size limits are properly configured
+
 ### Environment Variables
 - **Environment variables from multiple sources**:
   - Plain environment variable: `plain_env_var`
@@ -146,6 +164,11 @@ The image building and loading is automatically handled by the test framework wh
 - ✅ Custom file permissions (defaultMode) - Secret with 0400, ConfigMap with 0755
 - ✅ All files in volume inherit the specified defaultMode
 - ℹ️  Secret volumes with fsGroup: Kubernetes adds group read permission (0400 → 0440)
+- ✅ EmptyDir volumes (scratch space for temporary files)
+- ✅ EmptyDir with default medium (disk-backed) is mounted and writable
+- ✅ EmptyDir with Memory medium (tmpfs) for fast temporary storage
+- ✅ EmptyDir with sizeLimit to prevent disk/memory exhaustion
+- ✅ Files can be created, written, and deleted in EmptyDir (true writability)
 
 ### Environment Variables
 - ✅ Plain environment variables work

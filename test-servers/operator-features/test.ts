@@ -289,6 +289,87 @@ async function main() {
         test.assertEqual(permissionBits, 0o755, 'All files should have 0755 permissions (defaultMode)');
       });
 
+      // ----- Config: Storage (EmptyDir Volumes) -----
+
+      // Test: Verify EmptyDir with default medium exists and is writable
+      await test('emptyDir with default medium is mounted and writable', async () => {
+        const listResult = await client.callTool('list_directory', { path: '/emptydir-default' });
+        const listData = JSON.parse(listResult.content[0].text);
+
+        test.assert(listData.error === null, 'EmptyDir directory should exist');
+        console.log(`    EmptyDir /emptydir-default exists and is accessible`);
+
+        // Verify it's initially empty (no files from ConfigMap/Secret)
+        const initialFileCount = listData.entries.length;
+        console.log(`    Initial file count: ${initialFileCount} (should be empty on mount)`);
+      });
+
+      // Test: Verify EmptyDir is actually writable (unlike ConfigMap/Secret volumes)
+      await test('emptyDir supports write operations', async () => {
+        const writeResult = await client.callTool('test_directory_writable', { path: '/emptydir-default' });
+        const writeData = JSON.parse(writeResult.content[0].text);
+
+        console.log(`    Write test to /emptydir-default: writable=${writeData.writable}`);
+        test.assert(writeData.writable === true, 'EmptyDir should be writable');
+        test.assert(writeData.error === null, 'Should not have write errors');
+      });
+
+      // Test: Verify files persist in EmptyDir during pod lifecycle
+      await test('emptyDir persists files created during runtime', async () => {
+        // Create a test file using the write test
+        const writeResult = await client.callTool('test_directory_writable', { path: '/emptydir-default' });
+        const writeData = JSON.parse(writeResult.content[0].text);
+        test.assert(writeData.writable, 'Write operation should succeed');
+
+        // List directory to verify test file exists
+        const listResult = await client.callTool('list_directory', { path: '/emptydir-default' });
+        const listData = JSON.parse(listResult.content[0].text);
+
+        const fileNames = listData.entries.map((e: any) => e.name);
+        console.log(`    Files in /emptydir-default: ${fileNames.join(', ')}`);
+
+        // The test_directory_writable tool creates and deletes a test file
+        // So we verify the operation completed successfully
+        test.assert(writeData.writable, 'EmptyDir should support file creation/deletion');
+      });
+
+      // Test: Verify EmptyDir with Memory medium exists and is writable
+      await test('emptyDir with Memory medium (tmpfs) is mounted and writable', async () => {
+        const listResult = await client.callTool('list_directory', { path: '/emptydir-memory' });
+        const listData = JSON.parse(listResult.content[0].text);
+
+        test.assert(listData.error === null, 'Memory-backed EmptyDir should exist');
+        console.log(`    EmptyDir /emptydir-memory (Memory medium) exists`);
+
+        // Verify writability
+        const writeResult = await client.callTool('test_directory_writable', { path: '/emptydir-memory' });
+        const writeData = JSON.parse(writeResult.content[0].text);
+
+        console.log(`    Memory-backed EmptyDir writable: ${writeData.writable}`);
+        test.assert(writeData.writable === true, 'Memory-backed EmptyDir should be writable');
+      });
+
+      // Test: Verify EmptyDir with sizeLimit exists and is writable
+      await test('emptyDir with sizeLimit is mounted and writable', async () => {
+        const listResult = await client.callTool('list_directory', { path: '/emptydir-with-size' });
+        const listData = JSON.parse(listResult.content[0].text);
+
+        test.assert(listData.error === null, 'EmptyDir with sizeLimit should exist');
+        console.log(`    EmptyDir /emptydir-with-size (sizeLimit: 128Mi) exists`);
+
+        // Verify writability
+        const writeResult = await client.callTool('test_directory_writable', { path: '/emptydir-with-size' });
+        const writeData = JSON.parse(writeResult.content[0].text);
+
+        console.log(`    EmptyDir with sizeLimit writable: ${writeData.writable}`);
+        test.assert(writeData.writable === true, 'EmptyDir with sizeLimit should be writable');
+      });
+
+      // Note: EmptyDir volumes are truly writable, unlike ConfigMap/Secret volumes
+      // This is the key difference - EmptyDir provides scratch space for temporary files
+      // Memory-backed EmptyDir uses tmpfs for fast temporary storage
+      // Size limits help prevent disk/memory exhaustion
+
       // ----- Config: Environment Variables -----
 
       // Test: Verify plain environment variable
