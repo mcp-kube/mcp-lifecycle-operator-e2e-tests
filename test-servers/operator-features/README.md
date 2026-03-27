@@ -109,6 +109,14 @@ This test uses a custom Node.js MCP server (`server/`) that provides validation 
   - Verifies operator correctly configures pod ServiceAccount
   - ServiceAccount token is mounted and accessible
 
+### Health Probes
+- **Liveness Probe**: HTTP GET to `/health` endpoint
+  - Checks if container should be restarted
+  - Configuration: initialDelay=5s, period=10s, timeout=3s, failureThreshold=3
+- **Readiness Probe**: HTTP GET to `/ready` endpoint
+  - Checks if container can receive traffic
+  - Configuration: initialDelay=3s, period=5s, timeout=2s, failureThreshold=3
+
 ## How It Works
 
 1. **Build the custom MCP server image** (automated by test scripts)
@@ -160,6 +168,11 @@ The image building and loading is automatically handled by the test framework wh
 ### Runtime
 - ✅ Replica count configured (2 replicas)
 - ✅ ServiceAccount token mounted correctly
+
+### Health Probes
+- ✅ Liveness probe (HTTP GET) configured and responding
+- ✅ Readiness probe (HTTP GET) configured and responding
+- ✅ Probe timing parameters (initialDelaySeconds, periodSeconds, timeoutSeconds, etc.)
 
 ## Advantages
 

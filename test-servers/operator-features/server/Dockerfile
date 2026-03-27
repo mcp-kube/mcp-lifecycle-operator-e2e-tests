@@ -10,9 +10,10 @@ RUN npm install --production
 
 # Copy server code
 COPY index.js ./
+COPY healthcheck.sh ./
 
-# Make index.js executable
-RUN chmod +x index.js
+# Make scripts executable
+RUN chmod +x index.js healthcheck.sh
 
 # Run as non-root user for security
 USER node

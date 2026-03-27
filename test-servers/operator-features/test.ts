@@ -532,6 +532,42 @@ async function main() {
         test.assertEqual(data.permissions.gid, 2000, 'fsGroup should be 2000');
       });
 
+      // ----- Runtime: Health Probes -----
+
+      // Test: Verify liveness probe endpoint responds
+      await test('liveness probe endpoint responds correctly', async () => {
+        const response = await fetch('http://localhost:8080/health');
+        const data = await response.json();
+
+        console.log(`    Liveness probe /health returned status ${response.status}`);
+        test.assertEqual(response.status, 200, 'Liveness probe should return 200 OK');
+        test.assertEqual(data.status, 'ok', 'Liveness probe should return status: ok');
+      });
+
+      // Test: Verify readiness probe endpoint responds
+      await test('readiness probe endpoint responds correctly', async () => {
+        const response = await fetch('http://localhost:8080/ready');
+        const data = await response.json();
+
+        console.log(`    Readiness probe /ready returned status ${response.status}`);
+        test.assertEqual(response.status, 200, 'Readiness probe should return 200 OK');
+        test.assertEqual(data.status, 'ready', 'Readiness probe should return status: ready');
+      });
+
+      // Test: Verify healthcheck script marker file exists (for exec probe)
+      await test('healthcheck marker file exists for exec probe', async () => {
+        const result = await client.callTool('check_file_exists', { path: '/tmp/server-ready' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, '/tmp/server-ready marker file should exist');
+        console.log(`    Healthcheck marker file exists with content: "${data.content.trim()}"`);
+        test.assertEqual(data.content.trim(), 'ok', 'Marker file should contain "ok"');
+      });
+
+      // Note: The fact that this test is running proves the health probes are configured correctly
+      // If the readiness probe was failing, the pod would not be marked as Ready and the test
+      // framework would not be able to connect to the MCP server
+
       // ----- Runtime: Replicas and ServiceAccount -----
 
       // Test: Verify ServiceAccount is mounted

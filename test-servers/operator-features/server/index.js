@@ -35,10 +35,16 @@ console.log('='.repeat(60));
 const app = express();
 app.use(express.json());
 
-// Health check
+// Liveness probe endpoint
 app.get('/health', (req, res) => {
-  console.log('[HEALTH] Health check request received');
+  console.log('[HEALTH] Liveness check request received');
   res.json({ status: 'ok' });
+});
+
+// Readiness probe endpoint
+app.get('/ready', (req, res) => {
+  console.log('[READY] Readiness check request received');
+  res.json({ status: 'ready' });
 });
 
 // MCP JSON-RPC endpoint (configurable path)
@@ -468,11 +474,20 @@ async function handleToolCall(name, args, timestamp) {
   }
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('='.repeat(60));
   console.log(`✓ Server is ready and listening on port ${PORT}`);
   console.log(`✓ MCP endpoint: http://localhost:${PORT}${MCP_PATH}`);
-  console.log(`✓ Health check: http://localhost:${PORT}/health`);
+  console.log(`✓ Liveness probe: http://localhost:${PORT}/health`);
+  console.log(`✓ Readiness probe: http://localhost:${PORT}/ready`);
   console.log('='.repeat(60));
   console.log('Waiting for requests...');
+
+  // Create a marker file for exec probe to check
+  try {
+    await fs.writeFile('/tmp/server-ready', 'ok');
+    console.log('✓ Created /tmp/server-ready marker file for exec probe');
+  } catch (err) {
+    console.warn('⚠ Failed to create /tmp/server-ready:', err.message);
+  }
 });

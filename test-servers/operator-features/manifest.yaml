@@ -373,6 +373,34 @@ spec:
     # Replicas: Number of pod replicas for scaling/HA
     replicas: 2
 
+    # Health probes configuration
+    health:
+      # Liveness probe: HTTP GET to /health endpoint
+      # Determines if the container should be restarted
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+          scheme: HTTP
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+        successThreshold: 1
+        failureThreshold: 3
+
+      # Readiness probe: HTTP GET to /ready endpoint
+      # Determines if the container can receive traffic
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+          scheme: HTTP
+        initialDelaySeconds: 3
+        periodSeconds: 5
+        timeoutSeconds: 2
+        successThreshold: 1
+        failureThreshold: 3
+
     # Security context settings
     security:
       # Custom ServiceAccount for RBAC testing
