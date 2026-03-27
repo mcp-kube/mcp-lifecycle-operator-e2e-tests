@@ -19,11 +19,25 @@ for (const arg of process.argv) {
   }
 }
 
+console.log('='.repeat(60));
+console.log('Operator Features Validator Starting');
+console.log('='.repeat(60));
+console.log(`Node version: ${process.version}`);
+console.log(`Process ID: ${process.pid}`);
+console.log(`Working directory: ${process.cwd()}`);
+console.log(`PORT: ${PORT}`);
+console.log(`MCP_PATH: ${MCP_PATH}`);
+console.log(`Process arguments: ${process.argv.slice(2).join(' ')}`);
+console.log(`User ID: ${process.getuid?.() || 'N/A'}`);
+console.log(`Group ID: ${process.getgid?.() || 'N/A'}`);
+console.log('='.repeat(60));
+
 const app = express();
 app.use(express.json());
 
 // Health check
 app.get('/health', (req, res) => {
+  console.log('[HEALTH] Health check request received');
   res.json({ status: 'ok' });
 });
 
@@ -31,13 +45,18 @@ app.get('/health', (req, res) => {
 app.post(MCP_PATH, async (req, res) => {
   const { id, method, params } = req.body;
 
-  console.log(`MCP Request: ${method}`);
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] MCP Request: method=${method}, id=${id}`);
+  if (params && Object.keys(params).length > 0) {
+    console.log(`[${timestamp}]   Params: ${JSON.stringify(params)}`);
+  }
 
   try {
     let result;
 
     switch (method) {
       case 'initialize':
+        console.log(`[${timestamp}] Initializing MCP server`);
         result = {
           protocolVersion: '2025-11-25',
           capabilities: {
@@ -51,6 +70,7 @@ app.post(MCP_PATH, async (req, res) => {
         break;
 
       case 'tools/list':
+        console.log(`[${timestamp}] Listing available tools`);
         result = {
           tools: [
             {
@@ -152,19 +172,22 @@ app.post(MCP_PATH, async (req, res) => {
         break;
 
       case 'tools/call':
-        result = await handleToolCall(params.name, params.arguments || {});
+        console.log(`[${timestamp}] Calling tool: ${params.name}`);
+        result = await handleToolCall(params.name, params.arguments || {}, timestamp);
         break;
 
       default:
         throw { code: -32601, message: `Method not found: ${method}` };
     }
 
+    console.log(`[${timestamp}] Response sent successfully for ${method}`);
     res.json({
       jsonrpc: '2.0',
       id,
       result,
     });
   } catch (error) {
+    console.log(`[${timestamp}] Error handling ${method}: ${error.message}`);
     res.json({
       jsonrpc: '2.0',
       id,
@@ -176,10 +199,11 @@ app.post(MCP_PATH, async (req, res) => {
   }
 });
 
-async function handleToolCall(name, args) {
+async function handleToolCall(name, args, timestamp) {
   switch (name) {
     case 'check_file_exists': {
       const path = args.path;
+      console.log(`[${timestamp}]   check_file_exists: ${path}`);
       const result = {
         exists: false,
         path,
@@ -193,14 +217,18 @@ async function handleToolCall(name, args) {
           const stat = statSync(path);
           if (stat.isFile()) {
             result.content = await fs.readFile(path, 'utf-8');
+            console.log(`[${timestamp}]   File exists: ${path} (${result.content.length} bytes)`);
           } else {
             result.error = 'Path is not a file';
+            console.log(`[${timestamp}]   Path is not a file: ${path}`);
           }
         } else {
           result.error = 'File does not exist';
+          console.log(`[${timestamp}]   File does not exist: ${path}`);
         }
       } catch (error) {
         result.error = error.message;
+        console.log(`[${timestamp}]   Error checking file: ${error.message}`);
       }
 
       return {
@@ -215,6 +243,7 @@ async function handleToolCall(name, args) {
 
     case 'list_directory': {
       const path = args.path;
+      console.log(`[${timestamp}]   list_directory: ${path}`);
       const result = {
         path,
         entries: [],
@@ -224,10 +253,12 @@ async function handleToolCall(name, args) {
       try {
         if (!existsSync(path)) {
           result.error = 'Directory does not exist';
+          console.log(`[${timestamp}]   Directory does not exist: ${path}`);
         } else {
           const stat = statSync(path);
           if (!stat.isDirectory()) {
             result.error = 'Path is not a directory';
+            console.log(`[${timestamp}]   Path is not a directory: ${path}`);
           } else {
             const entries = await fs.readdir(path);
             for (const entry of entries) {
@@ -240,10 +271,12 @@ async function handleToolCall(name, args) {
                 mode: entryStat.mode.toString(8),
               });
             }
+            console.log(`[${timestamp}]   Directory contains ${entries.length} entries`);
           }
         }
       } catch (error) {
         result.error = error.message;
+        console.log(`[${timestamp}]   Error listing directory: ${error.message}`);
       }
 
       return {
@@ -258,11 +291,17 @@ async function handleToolCall(name, args) {
 
     case 'get_env_var': {
       const varName = args.name;
+      console.log(`[${timestamp}]   get_env_var: ${varName}`);
       const result = {
         name: varName,
         value: process.env[varName] || null,
         exists: varName in process.env,
       };
+      if (result.exists) {
+        console.log(`[${timestamp}]   Env var ${varName} = "${result.value}"`);
+      } else {
+        console.log(`[${timestamp}]   Env var ${varName} does not exist`);
+      }
 
       return {
         content: [
@@ -332,11 +371,13 @@ async function handleToolCall(name, args) {
     case 'get_process_arguments': {
       // process.argv includes: [node, script.js, ...args]
       // We want everything after the script name
+      console.log(`[${timestamp}]   get_process_arguments`);
       const result = {
         argv: process.argv,
         // Skip node executable and script path, return actual arguments
         args: process.argv.slice(2),
       };
+      console.log(`[${timestamp}]   Process has ${result.args.length} arguments`);
 
       return {
         content: [
@@ -428,7 +469,10 @@ async function handleToolCall(name, args) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Operator Features Validator listening on port ${PORT}`);
-  console.log(`MCP endpoint: http://localhost:${PORT}${MCP_PATH}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log('='.repeat(60));
+  console.log(`✓ Server is ready and listening on port ${PORT}`);
+  console.log(`✓ MCP endpoint: http://localhost:${PORT}${MCP_PATH}`);
+  console.log(`✓ Health check: http://localhost:${PORT}/health`);
+  console.log('='.repeat(60));
+  console.log('Waiting for requests...');
 });

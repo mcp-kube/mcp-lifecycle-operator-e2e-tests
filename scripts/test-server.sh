@@ -69,7 +69,10 @@ header_text "[DEPLOY] Waiting for MCPServer to be ready (timeout: ${SERVER_READY
 if ! kubectl wait --for=condition=Ready "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" --timeout="${SERVER_READY_TIMEOUT}s" 2>&1; then
   error_text "[DEPLOY] MCPServer failed to become ready"
   kubectl describe "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" > "${LOGS_DIR}/${SERVER_NAME}-describe.txt" 2>&1 || true
-  kubectl logs -l "app.kubernetes.io/name=${SERVER_NAME}" -n "${NAMESPACE}" --tail=-1 > "${LOGS_DIR}/${SERVER_NAME}.log" 2>&1 || true
+
+  # Try to get deployment name from MCPServer status for log collection
+  DEPLOYMENT_NAME=$(kubectl get "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.deploymentName}' 2>/dev/null || echo "${SERVER_NAME}")
+  kubectl logs "deployment/${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --tail=-1 --all-containers=true > "${LOGS_DIR}/${SERVER_NAME}.log" 2>&1 || true
 
   if [ "${KEEP_FAILED_SERVERS}" != "true" ]; then
     kubectl delete -f "${MANIFEST}" --ignore-not-found=true
@@ -130,7 +133,10 @@ npx tsx "${TEST_FILE}" 2>&1 | tee "${LOGS_DIR}/${SERVER_NAME}-test-output.log" |
 
 # Collect logs (always)
 header_text "[LOGS] Collecting server logs..."
-kubectl logs -l "app.kubernetes.io/name=${SERVER_NAME}" -n "${NAMESPACE}" --tail=-1 > "${LOGS_DIR}/${SERVER_NAME}-pod.log" 2>&1 || true
+# Get deployment name from MCPServer status
+DEPLOYMENT_NAME=$(kubectl get "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" -o jsonpath='{.status.deploymentName}' 2>/dev/null || echo "${SERVER_NAME}")
+# Get logs from all pods in the deployment
+kubectl logs "deployment/${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --tail=-1 --all-containers=true > "${LOGS_DIR}/${SERVER_NAME}-pod.log" 2>&1 || true
 kubectl describe "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" > "${LOGS_DIR}/${SERVER_NAME}-describe.txt" 2>&1 || true
 
 # Cleanup port-forward
