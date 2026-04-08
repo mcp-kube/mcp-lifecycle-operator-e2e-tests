@@ -11,6 +11,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -102,7 +103,7 @@ const testCases: TestCase[] = [
     serverName: 'error-scaled-to-zero',
     expectedAcceptedStatus: 'True',
     expectedAcceptedReason: 'Valid',
-    expectedReadyStatus: 'False',
+    expectedReadyStatus: 'True',  // Changed: PR #75 now sets Ready=True (Kubernetes semantics)
     expectedReadyReason: 'ScaledToZero',
     description: 'Deployment scaled to 0 replicas',
     stabilizationTime: 10,
@@ -120,6 +121,15 @@ async function main() {
   const manifestsDir = path.join(__dirname, 'manifests');
   const debugYaml = process.env.DEBUG_YAML === '1' || process.env.DEBUG_YAML === 'true';
 
+  // Create debug output directory if DEBUG_YAML is enabled
+  let debugDir = '';
+  if (debugYaml) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    debugDir = path.join(__dirname, '../../logs/debug-yaml', `error-conditions-${timestamp}`);
+    fs.mkdirSync(debugDir, { recursive: true });
+    console.log(`    [DEBUG_YAML] Output directory: ${debugDir}`);
+  }
+
   try {
     await framework.run(async (test) => {
       for (const testCase of testCases) {
@@ -129,10 +139,11 @@ async function main() {
           console.log(`    Deploying ${testCase.serverName}...`);
 
           if (debugYaml) {
-            console.log('    ───── Input Manifest ─────');
+            // Write input manifest to file
+            const inputFile = path.join(debugDir, `${testCase.serverName}-input.yaml`);
             const { stdout: manifestContent } = await execAsync(`cat ${manifestPath}`);
-            console.log(manifestContent.split('\n').map(line => `    ${line}`).join('\n'));
-            console.log('    ──────────────────────────');
+            fs.writeFileSync(inputFile, manifestContent);
+            console.log(`    [DEBUG_YAML] Input manifest: ${inputFile}`);
           }
 
           // Deploy the manifest
@@ -193,12 +204,13 @@ async function main() {
           test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
 
           if (debugYaml) {
-            console.log('    ───── Output Status ─────');
+            // Write output status to file
+            const outputFile = path.join(debugDir, `${testCase.serverName}-output.yaml`);
             const { stdout: statusYaml } = await execAsync(
               `kubectl get mcpserver ${testCase.serverName} -n ${namespace} -o yaml`
             );
-            console.log(statusYaml.split('\n').map(line => `    ${line}`).join('\n'));
-            console.log('    ─────────────────────────');
+            fs.writeFileSync(outputFile, statusYaml);
+            console.log(`    [DEBUG_YAML] Output status: ${outputFile}`);
           }
 
           // Cleanup

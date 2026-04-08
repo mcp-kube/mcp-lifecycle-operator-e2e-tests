@@ -22,7 +22,7 @@ Indicates overall server operational status.
 - `Available` (Status=True) - Server is ready, at least one instance healthy
 - `ConfigurationInvalid` (Status=False) - Accepted=False, cannot proceed
 - `DeploymentUnavailable` (Status=False) - No healthy instances (ImagePullBackOff, CrashLoopBackOff, etc.)
-- `ScaledToZero` (Status=False) - Deployment scaled to 0 replicas
+- `ScaledToZero` (Status=True) - Deployment scaled to 0 replicas (following Kubernetes Deployment semantics)
 - `Initializing` (Status=Unknown) - Waiting for initial deployment status
 
 ## Test Cases
@@ -39,9 +39,9 @@ Indicates overall server operational status.
 5. **ImagePullBackOff** - Non-existent image causes image pull failures
 6. **CrashLoopBackOff** - Container crashes immediately on startup
 
-### Scaling (Ready=False, ScaledToZero)
+### Scaling (Ready=True, ScaledToZero)
 
-7. **ScaledToZero** - Deployment configured with 0 replicas
+7. **ScaledToZero** - Deployment configured with 0 replicas (intentional, valid state following Kubernetes Deployment semantics)
 
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
@@ -89,14 +89,20 @@ DEBUG_YAML=1 ./scripts/run-e2e.sh
 
 ### Debug YAML Output
 
-Set `DEBUG_YAML=1` to see detailed YAML for each test:
+Set `DEBUG_YAML=1` to capture detailed YAML for each test:
 - **Input Manifest**: The MCPServer manifest being tested
 - **Output Status**: The resulting status with conditions, observedGeneration, etc.
+
+Files are written to: `logs/debug-yaml/error-conditions-{timestamp}/`
+- `{server-name}-input.yaml` - Input manifest for each error scenario
+- `{server-name}-output.yaml` - Full MCPServer YAML with status
 
 This is useful for:
 - Understanding exactly what's being tested
 - Debugging condition transitions
 - Documenting operator behavior
+- Comparing different test runs
+- Creating documentation examples
 
 ## Expected Results
 

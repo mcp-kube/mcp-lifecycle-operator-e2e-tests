@@ -1,6 +1,6 @@
 ---
-# Test Case: Ready=False, Reason=ScaledToZero
-# Scenario: Deployment with 0 replicas
+# Test Case: Ready=True, Reason=ScaledToZero
+# Scenario: Deployment with 0 replicas (intentional, valid state)
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
 metadata:

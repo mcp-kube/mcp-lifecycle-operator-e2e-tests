@@ -12,14 +12,28 @@
 import { MCPClient, TestFramework, runCommonTests, K8sUtils } from '../../framework/src/index.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function main() {
   const framework = new TestFramework('operator-features');
   // Use HTTP transport for this server with custom path
   const client = new MCPClient('http://localhost:8080/custom/test/path', { transport: 'http' });
   const debugYaml = process.env.DEBUG_YAML === '1' || process.env.DEBUG_YAML === 'true';
+
+  // Create debug output directory if DEBUG_YAML is enabled
+  let debugDir = '';
+  if (debugYaml) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    debugDir = path.join(__dirname, '../../logs/debug-yaml', `operator-features-${timestamp}`);
+    fs.mkdirSync(debugDir, { recursive: true });
+    console.log(`    [DEBUG_YAML] Output directory: ${debugDir}`);
+  }
 
   try {
     await framework.run(async (test) => {
@@ -686,12 +700,14 @@ async function main() {
         console.log('    ═══════════════════════════════════════════════');
         console.log('    ═══ PR #75 Condition-Based Status Testing ═══');
         console.log('    ═══════════════════════════════════════════════');
-        console.log('    ───── Input Spec ─────');
+
+        // Write input spec to file
+        const inputSpecFile = path.join(debugDir, 'input-spec.json');
         const { stdout: specYaml } = await execAsync(
           `kubectl get mcpserver ${serverName} -n ${namespace} -o jsonpath='{.spec}' | jq -r`
         );
-        console.log(specYaml.split('\n').map(line => `    ${line}`).join('\n'));
-        console.log('    ──────────────────────');
+        fs.writeFileSync(inputSpecFile, specYaml);
+        console.log(`    [DEBUG_YAML] Input spec: ${inputSpecFile}`);
       }
 
       // Test: Verify Accepted condition is True
@@ -756,19 +772,21 @@ async function main() {
       });
 
       if (debugYaml) {
-        console.log('    ───── Output Status ─────');
+        // Write output status to file
+        const outputStatusFile = path.join(debugDir, 'output-status.json');
         const { stdout: statusYaml } = await execAsync(
           `kubectl get mcpserver ${serverName} -n ${namespace} -o jsonpath='{.status}' | jq -r`
         );
-        console.log(statusYaml.split('\n').map(line => `    ${line}`).join('\n'));
-        console.log('    ─────────────────────────');
-        console.log('');
-        console.log('    ───── Full YAML ─────');
+        fs.writeFileSync(outputStatusFile, statusYaml);
+        console.log(`    [DEBUG_YAML] Output status: ${outputStatusFile}`);
+
+        // Write full YAML to file
+        const fullYamlFile = path.join(debugDir, 'full-resource.yaml');
         const { stdout: fullYaml } = await execAsync(
           `kubectl get mcpserver ${serverName} -n ${namespace} -o yaml`
         );
-        console.log(fullYaml.split('\n').map(line => `    ${line}`).join('\n'));
-        console.log('    ─────────────────────────');
+        fs.writeFileSync(fullYamlFile, fullYaml);
+        console.log(`    [DEBUG_YAML] Full YAML: ${fullYamlFile}`);
         console.log('    ═══════════════════════════════════════════════');
       }
 

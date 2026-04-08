@@ -89,7 +89,7 @@ KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 
 **Debug YAML output for condition tests:**
 ```bash
-# Shows input manifests and output status for PR #75 condition tests
+# Writes input manifests and output status to files in logs/debug-yaml/
 DEBUG_YAML=1 ./scripts/run-e2e.sh
 ```
 
@@ -139,7 +139,7 @@ All configuration is done via environment variables:
 - `SERVER_READY_TIMEOUT` - Timeout for server to be ready in seconds (default: `300`)
 - `TEST_TIMEOUT` - Timeout for individual tests in seconds (default: `30`)
 - `PORT_FORWARD_TIMEOUT` - Timeout for port-forward in seconds (default: `10`)
-- `DEBUG_YAML` - Show input manifests and output status for condition tests (default: `false`, set to `1` or `true` to enable)
+- `DEBUG_YAML` - Write input manifests and output status to files for condition tests (default: `false`, set to `1` or `true` to enable). Output directory: `logs/debug-yaml/{test-name}-{timestamp}/`
 
 ### Example Usage
 
