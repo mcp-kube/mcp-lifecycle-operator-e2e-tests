@@ -9,7 +9,7 @@
  * - Environment variables from multiple sources (plain, secrets, configmaps)
  */
 
-import { MCPClient, TestFramework, runCommonTests } from '../../framework/src/index.js';
+import { MCPClient, TestFramework, runCommonTests, K8sUtils } from '../../framework/src/index.js';
 
 async function main() {
   const framework = new TestFramework('operator-features');
@@ -670,6 +670,73 @@ async function main() {
       // 2. The deployment configuration is set correctly by the operator
       // 3. Kubernetes will maintain 2 replicas as specified
       // Full replica validation would require external kubectl commands or Kubernetes API access
+
+      // ----- Operator Status Conditions (PR #75 Features) -----
+
+      const k8s = new K8sUtils();
+      const serverName = 'operator-features';
+      const namespace = 'default';
+
+      // Test: Verify Accepted condition is True
+      await test('MCPServer has Accepted condition with status True', async () => {
+        const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+
+        console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+        test.assertEqual(acceptedCondition.status, 'True', 'Accepted condition should be True');
+        test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted condition reason should be Valid');
+        test.assert(acceptedCondition.type === 'Accepted', 'Condition type should be Accepted');
+      });
+
+      // Test: Verify Ready condition is True
+      await test('MCPServer has Ready condition with status True', async () => {
+        const readyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+
+        console.log(`    Ready: status=${readyCondition.status}, reason=${readyCondition.reason}`);
+        test.assertEqual(readyCondition.status, 'True', 'Ready condition should be True');
+        test.assertEqual(readyCondition.reason, 'Available', 'Ready condition reason should be Available');
+        test.assert(readyCondition.type === 'Ready', 'Condition type should be Ready');
+      });
+
+      // Test: Verify observedGeneration matches metadata.generation
+      await test('observedGeneration matches metadata.generation', async () => {
+        const observedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
+        const generation = await k8s.getMCPServerGeneration(serverName, namespace);
+
+        console.log(`    metadata.generation=${generation}, status.observedGeneration=${observedGeneration}`);
+        test.assertEqual(observedGeneration, generation, 'observedGeneration should match generation');
+        test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
+      });
+
+      // Test: Verify status fields are populated
+      await test('MCPServer status fields are populated correctly', async () => {
+        const status = await k8s.getMCPServerStatus(serverName, namespace);
+
+        console.log(`    deploymentName=${status.deploymentName}, serviceName=${status.serviceName}`);
+        test.assert(status.deploymentName !== undefined && status.deploymentName !== '', 'deploymentName should be set');
+        test.assert(status.serviceName !== undefined && status.serviceName !== '', 'serviceName should be set');
+        test.assert(status.serviceName === serverName, 'serviceName should match server name');
+
+        // Verify address is populated (PR #75 changed structure to use url instead of host/port)
+        test.assert(status.address !== undefined, 'address should be present');
+        test.assert(status.address.url !== undefined && status.address.url !== '', 'address.url should be set');
+        test.assert(status.address.url.includes('http'), 'address.url should be a valid HTTP URL');
+        test.assert(status.address.url.includes(serverName), 'address.url should contain server name');
+        console.log(`    address.url: ${status.address.url}`);
+      });
+
+      // Test: Verify conditions have required metadata fields
+      await test('condition metadata fields are populated correctly', async () => {
+        const readyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+
+        // All conditions should have lastTransitionTime
+        test.assert(readyCondition.lastTransitionTime !== undefined, 'lastTransitionTime should be present');
+        console.log(`    lastTransitionTime=${readyCondition.lastTransitionTime}`);
+
+        // ObservedGeneration should be set on conditions
+        test.assert(readyCondition.observedGeneration !== undefined, 'observedGeneration should be set on condition');
+        test.assert(readyCondition.observedGeneration > 0, 'observedGeneration on condition should be greater than 0');
+        console.log(`    condition observedGeneration=${readyCondition.observedGeneration}`);
+      });
 
       // Cleanup: Disconnect from server
       await client.disconnect();
