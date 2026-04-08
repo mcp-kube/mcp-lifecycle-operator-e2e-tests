@@ -87,6 +87,12 @@ KEEP_CLUSTER=true ./scripts/run-e2e.sh
 KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 ```
 
+**Debug YAML output for condition tests:**
+```bash
+# Shows input manifests and output status for PR #75 condition tests
+DEBUG_YAML=1 ./scripts/run-e2e.sh
+```
+
 ### Individual Scripts
 
 **Setup cluster only:**
@@ -133,6 +139,7 @@ All configuration is done via environment variables:
 - `SERVER_READY_TIMEOUT` - Timeout for server to be ready in seconds (default: `300`)
 - `TEST_TIMEOUT` - Timeout for individual tests in seconds (default: `30`)
 - `PORT_FORWARD_TIMEOUT` - Timeout for port-forward in seconds (default: `10`)
+- `DEBUG_YAML` - Show input manifests and output status for condition tests (default: `false`, set to `1` or `true` to enable)
 
 ### Example Usage
 

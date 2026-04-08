@@ -107,12 +107,6 @@ for server_dir in "${PROJECT_ROOT}"/test-servers/*/; do
     continue
   fi
 
-  # Check if manifest exists
-  if [ ! -f "${server_dir}/manifest.yaml" ]; then
-    echo "Skipping $(basename "${server_dir}") - no manifest.yaml found"
-    continue
-  fi
-
   # Check if test file exists
   if [ ! -f "${server_dir}/test.ts" ]; then
     echo "Skipping $(basename "${server_dir}") - no test.ts found"
@@ -126,14 +120,34 @@ for server_dir in "${PROJECT_ROOT}"/test-servers/*/; do
   header_text "[SERVER ${TOTAL_TESTS}] Testing ${SERVER_NAME}..."
   echo ""
 
-  # Run tests for this server (continue on failure)
-  if "${SCRIPT_DIR}/test-server.sh" "${server_dir}"; then
-    PASSED_TESTS=$((PASSED_TESTS + 1))
-    success_text "✓ ${SERVER_NAME} passed"
+  # Check if this is a standalone test (no manifest.yaml)
+  # Standalone tests manage their own resources and run test.ts directly
+  if [ ! -f "${server_dir}/manifest.yaml" ]; then
+    header_text "[STANDALONE TEST] Running ${SERVER_NAME} test directly..."
+
+    # Run the test script directly (it manages its own deployment/cleanup)
+    TEST_EXIT_CODE=0
+    cd "${PROJECT_ROOT}/framework"
+    npx tsx "${server_dir}/test.ts" 2>&1 | tee "${PROJECT_ROOT}/logs/${SERVER_NAME}-test-output.log" || TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+    if [ "${TEST_EXIT_CODE}" -eq 0 ]; then
+      PASSED_TESTS=$((PASSED_TESTS + 1))
+      success_text "✓ ${SERVER_NAME} passed"
+    else
+      FAILED_TESTS=$((FAILED_TESTS + 1))
+      FAILED_SERVERS+=("${SERVER_NAME}")
+      error_text "✗ ${SERVER_NAME} failed"
+    fi
   else
-    FAILED_TESTS=$((FAILED_TESTS + 1))
-    FAILED_SERVERS+=("${SERVER_NAME}")
-    error_text "✗ ${SERVER_NAME} failed"
+    # Standard test with manifest.yaml - use test-server.sh
+    if "${SCRIPT_DIR}/test-server.sh" "${server_dir}"; then
+      PASSED_TESTS=$((PASSED_TESTS + 1))
+      success_text "✓ ${SERVER_NAME} passed"
+    else
+      FAILED_TESTS=$((FAILED_TESTS + 1))
+      FAILED_SERVERS+=("${SERVER_NAME}")
+      error_text "✗ ${SERVER_NAME} failed"
+    fi
   fi
 
   echo ""

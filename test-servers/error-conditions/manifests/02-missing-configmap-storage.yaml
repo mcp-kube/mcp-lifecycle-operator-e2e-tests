@@ -1,0 +1,22 @@
+---
+# Test Case: Accepted=False, Reason=Invalid
+# Scenario: Missing ConfigMap referenced in storage
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: error-missing-configmap-storage
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/modelcontextprotocol/servers/everything:latest
+  config:
+    port: 8080
+    storage:
+      - path: /mounted-configmap
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: this-configmap-does-not-exist

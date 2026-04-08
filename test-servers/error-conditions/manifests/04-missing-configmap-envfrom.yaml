@@ -1,0 +1,18 @@
+---
+# Test Case: Accepted=False, Reason=Invalid
+# Scenario: Missing ConfigMap referenced in envFrom
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: error-missing-configmap-envfrom
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/modelcontextprotocol/servers/everything:latest
+  config:
+    port: 8080
+    envFrom:
+      - configMapRef:
+          name: this-configmap-does-not-exist

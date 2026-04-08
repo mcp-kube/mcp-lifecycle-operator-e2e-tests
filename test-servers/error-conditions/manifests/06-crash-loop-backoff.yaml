@@ -1,0 +1,21 @@
+---
+# Test Case: Ready=False, Reason=DeploymentUnavailable
+# Scenario: Container crashes on startup causing CrashLoopBackOff
+# Using busybox with a command that immediately exits with error
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: error-crash-loop-backoff
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: docker.io/library/busybox:latest
+  config:
+    port: 8080
+    # This command will cause the container to crash immediately
+    arguments:
+      - /bin/sh
+      - -c
+      - "exit 1"

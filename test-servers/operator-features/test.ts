@@ -10,11 +10,16 @@
  */
 
 import { MCPClient, TestFramework, runCommonTests, K8sUtils } from '../../framework/src/index.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 async function main() {
   const framework = new TestFramework('operator-features');
   // Use HTTP transport for this server with custom path
   const client = new MCPClient('http://localhost:8080/custom/test/path', { transport: 'http' });
+  const debugYaml = process.env.DEBUG_YAML === '1' || process.env.DEBUG_YAML === 'true';
 
   try {
     await framework.run(async (test) => {
@@ -677,6 +682,18 @@ async function main() {
       const serverName = 'operator-features';
       const namespace = 'default';
 
+      if (debugYaml) {
+        console.log('    ═══════════════════════════════════════════════');
+        console.log('    ═══ PR #75 Condition-Based Status Testing ═══');
+        console.log('    ═══════════════════════════════════════════════');
+        console.log('    ───── Input Spec ─────');
+        const { stdout: specYaml } = await execAsync(
+          `kubectl get mcpserver ${serverName} -n ${namespace} -o jsonpath='{.spec}' | jq -r`
+        );
+        console.log(specYaml.split('\n').map(line => `    ${line}`).join('\n'));
+        console.log('    ──────────────────────');
+      }
+
       // Test: Verify Accepted condition is True
       await test('MCPServer has Accepted condition with status True', async () => {
         const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
@@ -737,6 +754,23 @@ async function main() {
         test.assert(readyCondition.observedGeneration > 0, 'observedGeneration on condition should be greater than 0');
         console.log(`    condition observedGeneration=${readyCondition.observedGeneration}`);
       });
+
+      if (debugYaml) {
+        console.log('    ───── Output Status ─────');
+        const { stdout: statusYaml } = await execAsync(
+          `kubectl get mcpserver ${serverName} -n ${namespace} -o jsonpath='{.status}' | jq -r`
+        );
+        console.log(statusYaml.split('\n').map(line => `    ${line}`).join('\n'));
+        console.log('    ─────────────────────────');
+        console.log('');
+        console.log('    ───── Full YAML ─────');
+        const { stdout: fullYaml } = await execAsync(
+          `kubectl get mcpserver ${serverName} -n ${namespace} -o yaml`
+        );
+        console.log(fullYaml.split('\n').map(line => `    ${line}`).join('\n'));
+        console.log('    ─────────────────────────');
+        console.log('    ═══════════════════════════════════════════════');
+      }
 
       // Cleanup: Disconnect from server
       await client.disconnect();
