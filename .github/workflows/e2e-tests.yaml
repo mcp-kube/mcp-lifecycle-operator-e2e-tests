@@ -27,6 +27,8 @@ jobs:
     name: Run E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -80,6 +82,8 @@ jobs:
           # Use operator ref and repo from manual workflow dispatch input (if provided)
           OPERATOR_REF: ${{ github.event.inputs.operator_ref || 'main' }}
           OPERATOR_REPO: ${{ github.event.inputs.operator_repo || 'https://github.com/kubernetes-sigs/mcp-lifecycle-operator' }}
+          # Pass GitHub token for private repository access (if needed)
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test logs on failure
         if: failure() && steps.e2e.conclusion == 'failure'
@@ -103,6 +107,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
 
     strategy:
       fail-fast: false
@@ -153,6 +159,8 @@ jobs:
         env:
           OPERATOR_REF: ${{ matrix.operator_ref }}
           NO_COLOR: "1"
+          # Pass GitHub token for private repository access (if needed)
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test logs on failure
         if: failure() && steps.e2e.conclusion == 'failure'

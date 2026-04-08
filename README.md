@@ -71,6 +71,12 @@ OPERATOR_REF=main ./scripts/run-e2e.sh
 OPERATOR_REPO=https://github.com/username/mcp-lifecycle-operator OPERATOR_REF=feature-branch ./scripts/run-e2e.sh
 ```
 
+**Test with operator from a private repository:**
+```bash
+# Requires a GitHub token with 'contents: read' permission
+GITHUB_TOKEN=ghp_yourtoken OPERATOR_REPO=https://github.com/username/private-fork OPERATOR_REF=branch ./scripts/run-e2e.sh
+```
+
 **Keep cluster after tests for debugging:**
 ```bash
 KEEP_CLUSTER=true ./scripts/run-e2e.sh
@@ -116,6 +122,7 @@ All configuration is done via environment variables:
 - `OPERATOR_REF` - Git ref to build operator from (default: `main`)
 - `OPERATOR_REPO` - Git repository URL for operator (default: `https://github.com/kubernetes-sigs/mcp-lifecycle-operator`)
 - `OPERATOR_IMAGE` - Docker image name for operator (default: `mcp-operator:test`)
+- `GITHUB_TOKEN` - GitHub personal access token for cloning private repositories (optional, required for private forks)
 
 ### Cluster Configuration
 - `KIND_CLUSTER_NAME` - Name of Kind cluster (default: `mcp-e2e-test`)
@@ -135,6 +142,9 @@ OPERATOR_REF=feature/new-feature ./scripts/run-e2e.sh
 
 # Test with operator from a fork
 OPERATOR_REPO=https://github.com/username/mcp-lifecycle-operator OPERATOR_REF=main ./scripts/run-e2e.sh
+
+# Test with operator from a private fork (requires GitHub token)
+GITHUB_TOKEN=ghp_yourtoken OPERATOR_REPO=https://github.com/username/private-fork OPERATOR_REF=main ./scripts/run-e2e.sh
 
 # Keep cluster and failed servers for debugging
 KEEP_CLUSTER=true KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
@@ -440,6 +450,20 @@ You can manually trigger tests from GitHub UI to test operator PRs or forks:
 **Testing a specific commit:**
 - **Operator git ref**: `abc123def` (commit SHA)
 - **Operator repository URL**: (leave default or use `https://github.com/kubernetes-sigs/mcp-lifecycle-operator`)
+
+### GitHub Token Permissions
+
+The workflows use `secrets.GITHUB_TOKEN` to authenticate git clone operations. This token is automatically provided by GitHub Actions.
+
+**Required permissions:**
+- `contents: read` - Required for cloning operator repositories
+
+**For private repositories:**
+- Public repositories from `kubernetes-sigs/mcp-lifecycle-operator` work without additional configuration
+- Private forks require the workflow to have access to the repository. The default `GITHUB_TOKEN` can access:
+  - The current repository
+  - Other repositories in the same organization (if the organization allows it)
+- For private forks in other organizations, you may need to create a Personal Access Token (PAT) with `repo` scope and add it as a repository secret
 
 See [`.github/workflows/README.md`](.github/workflows/README.md) for detailed workflow documentation.
 

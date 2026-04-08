@@ -26,6 +26,7 @@ OPERATOR_REF=${OPERATOR_REF:-"main"}
 OPERATOR_REPO=${OPERATOR_REPO:-"https://github.com/kubernetes-sigs/mcp-lifecycle-operator"}
 KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-"kind"}
 OPERATOR_IMAGE=${OPERATOR_IMAGE:-"mcp-operator:test"}
+GITHUB_TOKEN=${GITHUB_TOKEN:-""}
 
 header_text "[OPERATOR] Building and deploying MCP lifecycle operator from source (ref: ${OPERATOR_REF})"
 
@@ -34,7 +35,14 @@ OPERATOR_DIR=$(mktemp -d)
 trap "rm -rf ${OPERATOR_DIR}" EXIT
 
 header_text "[OPERATOR] Cloning operator repository..."
-git clone --quiet "${OPERATOR_REPO}" "${OPERATOR_DIR}"
+# If GITHUB_TOKEN is provided, use it for authentication
+if [ -n "${GITHUB_TOKEN}" ]; then
+  # Replace https://github.com with https://token@github.com for authenticated access
+  AUTH_REPO=$(echo "${OPERATOR_REPO}" | sed "s|https://github.com|https://${GITHUB_TOKEN}@github.com|")
+  git clone --quiet "${AUTH_REPO}" "${OPERATOR_DIR}"
+else
+  git clone --quiet "${OPERATOR_REPO}" "${OPERATOR_DIR}"
+fi
 cd "${OPERATOR_DIR}"
 
 header_text "[OPERATOR] Checking out ref: ${OPERATOR_REF}"
