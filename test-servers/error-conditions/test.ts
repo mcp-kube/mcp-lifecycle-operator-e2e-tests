@@ -11,6 +11,7 @@ import {
   K8sUtils,
   StatusWatcher,
   TransitionValidator,
+  ValidationRules,
   type TransitionValidationRule,
 } from '../../framework/src/index.js';
 import { exec } from 'child_process';
@@ -49,20 +50,7 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'ConfigurationInvalid',
     description: 'Secret referenced in storage does not exist',
     stabilizationTime: 5,
-    transitionValidation: {
-      name: 'ConfigurationInvalid should be immediate',
-      expectedTransitions: [
-        {
-          conditionType: 'Ready',
-          status: 'False',
-          reason: 'ConfigurationInvalid',
-          messageContains: 'Configuration must be fixed',
-        },
-      ],
-      // Configuration errors should be detected immediately - no flickers
-      ...TransitionValidator.noOptimisticLockFlickers(),
-      allowExtraTransitions: false, // Expect exactly 1 transition
-    },
+    transitionValidation: ValidationRules.configurationInvalid(),
   },
   {
     name: 'Missing ConfigMap in storage',
@@ -107,22 +95,7 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'DeploymentUnavailable',
     description: 'Non-existent image causes ImagePullBackOff',
     stabilizationTime: 60, // Image pull errors take time to appear
-    transitionValidation: {
-      name: 'ImagePullBackOff should show DeploymentUnavailable',
-      expectedTransitions: [
-        // Image pull fails - goes directly to DeploymentUnavailable
-        // (No Initializing state observed in practice)
-        {
-          conditionType: 'Ready',
-          status: 'False',
-          reason: 'DeploymentUnavailable',
-        },
-      ],
-      // Forbid optimistic lock conflict flickers
-      ...TransitionValidator.noOptimisticLockFlickers(),
-      // May have multiple transitions as deployment stabilizes
-      allowExtraTransitions: true,
-    },
+    transitionValidation: ValidationRules.imagePullBackOff(),
   },
   {
     name: 'CrashLoopBackOff',
@@ -134,6 +107,7 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'DeploymentUnavailable',
     description: 'Container crashes causing CrashLoopBackOff',
     stabilizationTime: 30, // Crash loop takes time to establish
+    transitionValidation: ValidationRules.crashLoopBackOff(),
   },
   {
     name: 'ScaledToZero',
@@ -145,26 +119,168 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'ScaledToZero',
     description: 'Deployment scaled to 0 replicas',
     stabilizationTime: 10,
-    transitionValidation: {
-      name: 'ScaledToZero should not flicker',
-      expectedTransitions: [
-        {
-          conditionType: 'Ready',
-          status: 'True',
-          reason: 'ScaledToZero',
-          messageContains: 'scaled to 0 replicas',
-        },
-      ],
-      // Forbid optimistic lock conflict flickers
-      ...TransitionValidator.noOptimisticLockFlickers(),
-      // Allow extra transitions for now (we might see multiple updates during reconciliation)
-      allowExtraTransitions: true,
-    },
+    transitionValidation: ValidationRules.scaledToZero(),
   },
 ];
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Run a single test case
+ * Extracted into a function to support both sequential and parallel execution
+ */
+async function runTestCase(
+  testCase: TestCase,
+  test: any,
+  k8s: K8sUtils,
+  namespace: string,
+  manifestsDir: string,
+  debugDir: string,
+  debugYaml: boolean
+): Promise<void> {
+  const manifestPath = path.join(manifestsDir, testCase.manifestFile);
+
+  await test(`${testCase.name}: ${testCase.description}`, async () => {
+    console.log(`    Deploying ${testCase.serverName}...`);
+
+    // Start status watcher BEFORE deploying if DEBUG_YAML is enabled
+    let watcher: StatusWatcher | undefined;
+    if (debugYaml) {
+      const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
+      watcher = new StatusWatcher({
+        serverName: testCase.serverName,
+        namespace,
+        outputDir: watchDir,
+      });
+
+      // Write input manifest to file
+      const inputFile = path.join(debugDir, `${testCase.serverName}-input.yaml`);
+      const { stdout: manifestContent } = await execAsync(`cat ${manifestPath}`);
+      fs.writeFileSync(inputFile, manifestContent);
+      console.log(`    [DEBUG_YAML] Input manifest: ${inputFile}`);
+
+      // Start watcher BEFORE deploying to capture all transitions
+      await watcher.start();
+      // Give watcher a moment to start up
+      await sleep(500);
+    }
+
+    // Deploy the manifest
+    await execAsync(`kubectl apply -f ${manifestPath}`);
+
+    // Wait for conditions to reach expected state (with polling)
+    const stabilizationTime = testCase.stabilizationTime || 10;
+    console.log(`    Waiting for conditions to reach expected state (timeout: ${stabilizationTime}s)...`);
+
+    try {
+      // Wait for Ready condition to reach expected state
+      await k8s.waitForCondition(
+        testCase.serverName,
+        'Ready',
+        testCase.expectedReadyStatus,
+        testCase.expectedReadyReason,
+        namespace,
+        stabilizationTime
+      );
+    } catch (err) {
+      // If polling fails, that's okay - we'll verify in the assertions below
+      console.log(`    ⚠️  Polling timed out, checking current state...`);
+    }
+
+    // Get and verify Accepted condition
+    const acceptedCondition = await k8s.getMCPServerCondition(
+      testCase.serverName,
+      'Accepted',
+      namespace
+    );
+
+    console.log(
+      `    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}, message="${acceptedCondition.message}"`
+    );
+    test.assertEqual(
+      acceptedCondition.status,
+      testCase.expectedAcceptedStatus,
+      `Accepted status should be ${testCase.expectedAcceptedStatus}`
+    );
+    test.assertEqual(
+      acceptedCondition.reason,
+      testCase.expectedAcceptedReason,
+      `Accepted reason should be ${testCase.expectedAcceptedReason}`
+    );
+
+    // Get and verify Ready condition
+    const readyCondition = await k8s.getMCPServerCondition(
+      testCase.serverName,
+      'Ready',
+      namespace
+    );
+
+    console.log(
+      `    Ready: status=${readyCondition.status}, reason=${readyCondition.reason}, message="${readyCondition.message}"`
+    );
+    test.assertEqual(
+      readyCondition.status,
+      testCase.expectedReadyStatus,
+      `Ready status should be ${testCase.expectedReadyStatus}`
+    );
+    test.assertEqual(
+      readyCondition.reason,
+      testCase.expectedReadyReason,
+      `Ready reason should be ${testCase.expectedReadyReason}`
+    );
+
+    // Verify observedGeneration is set
+    const observedGeneration = await k8s.getMCPServerObservedGeneration(
+      testCase.serverName,
+      namespace
+    );
+    test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
+
+    if (debugYaml) {
+      // Write output status to file
+      const outputFile = path.join(debugDir, `${testCase.serverName}-output.yaml`);
+      const { stdout: statusYaml } = await execAsync(
+        `kubectl get mcpserver ${testCase.serverName} -n ${namespace} -o yaml`
+      );
+      fs.writeFileSync(outputFile, statusYaml);
+      console.log(`    [DEBUG_YAML] Output status: ${outputFile}`);
+
+      // Stop watcher
+      if (watcher) {
+        watcher.stop();
+      }
+
+      // Validate status transitions if validation rule is defined
+      if (testCase.transitionValidation) {
+        const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
+        console.log(`    [TRANSITION_VALIDATION] Validating transitions...`);
+
+        const validationResult = TransitionValidator.validate(
+          testCase.transitionValidation,
+          watchDir
+        );
+
+        // Print formatted result
+        const formattedResult = TransitionValidator.formatResult(validationResult);
+        console.log(formattedResult.split('\n').map(line => `    ${line}`).join('\n'));
+
+        // Fail test if validation failed
+        test.assert(
+          validationResult.passed,
+          `Transition validation failed:\n${validationResult.errors.join('\n')}`
+        );
+      }
+    }
+
+    // Cleanup
+    console.log(`    Cleaning up ${testCase.serverName}...`);
+    await execAsync(`kubectl delete mcpserver ${testCase.serverName} -n ${namespace} --ignore-not-found=true`);
+
+    // Wait a bit for cleanup to complete
+    await sleep(2000);
+  });
 }
 
 async function main() {
@@ -173,6 +289,7 @@ async function main() {
   const namespace = 'default';
   const manifestsDir = path.join(__dirname, 'manifests');
   const debugYaml = process.env.DEBUG_YAML === '1' || process.env.DEBUG_YAML === 'true';
+  const parallel = process.env.PARALLEL_TESTS === '1' || process.env.PARALLEL_TESTS === 'true';
 
   // Create debug output directory if DEBUG_YAML is enabled
   let debugDir = '';
@@ -185,134 +302,52 @@ async function main() {
 
   try {
     await framework.run(async (test) => {
-      for (const testCase of testCases) {
-        const manifestPath = path.join(manifestsDir, testCase.manifestFile);
+      if (parallel) {
+        console.log('    [PARALLEL] Running tests in parallel groups...');
 
-        await test(`${testCase.name}: ${testCase.description}`, async () => {
-          console.log(`    Deploying ${testCase.serverName}...`);
+        // Group 1: Configuration errors (can run in parallel - fast, no resource contention)
+        const configErrorTests = testCases.filter(tc =>
+          tc.name.includes('Missing') && (tc.name.includes('Secret') || tc.name.includes('ConfigMap'))
+        );
 
-          // Start status watcher BEFORE deploying if DEBUG_YAML is enabled
-          let watcher: StatusWatcher | undefined;
-          if (debugYaml) {
-            const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
-            watcher = new StatusWatcher({
-              serverName: testCase.serverName,
-              namespace,
-              outputDir: watchDir,
-            });
+        // Group 2: Deployment errors (sequential - resource intensive)
+        const deploymentErrorTests = testCases.filter(tc =>
+          tc.name.includes('ImagePull') || tc.name.includes('CrashLoop')
+        );
 
-            // Write input manifest to file
-            const inputFile = path.join(debugDir, `${testCase.serverName}-input.yaml`);
-            const { stdout: manifestContent } = await execAsync(`cat ${manifestPath}`);
-            fs.writeFileSync(inputFile, manifestContent);
-            console.log(`    [DEBUG_YAML] Input manifest: ${inputFile}`);
+        // Group 3: Scaling tests
+        const scalingTests = testCases.filter(tc =>
+          tc.name.includes('ScaledToZero')
+        );
 
-            // Start watcher BEFORE deploying to capture all transitions
-            await watcher.start();
-            // Give watcher a moment to start up
-            await sleep(500);
-          }
+        // Run groups in parallel
+        await Promise.all([
+          // Group 1: All config errors in parallel
+          Promise.all(
+            configErrorTests.map(tc =>
+              runTestCase(tc, test, k8s, namespace, manifestsDir, debugDir, debugYaml)
+            )
+          ),
 
-          // Deploy the manifest
-          await execAsync(`kubectl apply -f ${manifestPath}`);
-
-          // Wait for the condition to stabilize
-          const stabilizationTime = testCase.stabilizationTime || 10;
-          console.log(`    Waiting ${stabilizationTime}s for conditions to stabilize...`);
-          await sleep(stabilizationTime * 1000);
-
-          // Get and verify Accepted condition
-          const acceptedCondition = await k8s.getMCPServerCondition(
-            testCase.serverName,
-            'Accepted',
-            namespace
-          );
-
-          console.log(
-            `    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}, message="${acceptedCondition.message}"`
-          );
-          test.assertEqual(
-            acceptedCondition.status,
-            testCase.expectedAcceptedStatus,
-            `Accepted status should be ${testCase.expectedAcceptedStatus}`
-          );
-          test.assertEqual(
-            acceptedCondition.reason,
-            testCase.expectedAcceptedReason,
-            `Accepted reason should be ${testCase.expectedAcceptedReason}`
-          );
-
-          // Get and verify Ready condition
-          const readyCondition = await k8s.getMCPServerCondition(
-            testCase.serverName,
-            'Ready',
-            namespace
-          );
-
-          console.log(
-            `    Ready: status=${readyCondition.status}, reason=${readyCondition.reason}, message="${readyCondition.message}"`
-          );
-          test.assertEqual(
-            readyCondition.status,
-            testCase.expectedReadyStatus,
-            `Ready status should be ${testCase.expectedReadyStatus}`
-          );
-          test.assertEqual(
-            readyCondition.reason,
-            testCase.expectedReadyReason,
-            `Ready reason should be ${testCase.expectedReadyReason}`
-          );
-
-          // Verify observedGeneration is set
-          const observedGeneration = await k8s.getMCPServerObservedGeneration(
-            testCase.serverName,
-            namespace
-          );
-          test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
-
-          if (debugYaml) {
-            // Write output status to file
-            const outputFile = path.join(debugDir, `${testCase.serverName}-output.yaml`);
-            const { stdout: statusYaml } = await execAsync(
-              `kubectl get mcpserver ${testCase.serverName} -n ${namespace} -o yaml`
-            );
-            fs.writeFileSync(outputFile, statusYaml);
-            console.log(`    [DEBUG_YAML] Output status: ${outputFile}`);
-
-            // Stop watcher
-            if (watcher) {
-              watcher.stop();
+          // Group 2: Deployment errors sequentially
+          (async () => {
+            for (const tc of deploymentErrorTests) {
+              await runTestCase(tc, test, k8s, namespace, manifestsDir, debugDir, debugYaml);
             }
+          })(),
 
-            // Validate status transitions if validation rule is defined
-            if (testCase.transitionValidation) {
-              const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
-              console.log(`    [TRANSITION_VALIDATION] Validating transitions...`);
-
-              const validationResult = TransitionValidator.validate(
-                testCase.transitionValidation,
-                watchDir
-              );
-
-              // Print formatted result
-              const formattedResult = TransitionValidator.formatResult(validationResult);
-              console.log(formattedResult.split('\n').map(line => `    ${line}`).join('\n'));
-
-              // Fail test if validation failed
-              test.assert(
-                validationResult.passed,
-                `Transition validation failed:\n${validationResult.errors.join('\n')}`
-              );
-            }
-          }
-
-          // Cleanup
-          console.log(`    Cleaning up ${testCase.serverName}...`);
-          await execAsync(`kubectl delete mcpserver ${testCase.serverName} -n ${namespace} --ignore-not-found=true`);
-
-          // Wait a bit for cleanup to complete
-          await sleep(2000);
-        });
+          // Group 3: Scaling tests
+          Promise.all(
+            scalingTests.map(tc =>
+              runTestCase(tc, test, k8s, namespace, manifestsDir, debugDir, debugYaml)
+            )
+          ),
+        ]);
+      } else {
+        // Sequential execution (original behavior)
+        for (const testCase of testCases) {
+          await runTestCase(testCase, test, k8s, namespace, manifestsDir, debugDir, debugYaml);
+        }
       }
     });
   } catch (error) {

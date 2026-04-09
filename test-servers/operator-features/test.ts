@@ -16,7 +16,7 @@ import {
   K8sUtils,
   StatusWatcher,
   TransitionValidator,
-  type TransitionValidationRule,
+  ValidationRules,
 } from '../../framework/src/index.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -830,32 +830,13 @@ async function main() {
           // Wait a moment for watcher to write final transitions
           await sleep(500);
 
-          // Define validation rule for operator-features (happy path)
-          const validationRule: TransitionValidationRule = {
-            name: 'operator-features should transition smoothly to Available',
-            expectedTransitions: [
-              // May start with Initializing (if we caught it early enough)
-              {
-                conditionType: 'Ready',
-                status: 'Unknown',
-                reason: 'Initializing',
-              },
-              // Should reach Available state
-              {
-                conditionType: 'Ready',
-                status: 'True',
-                reason: 'Available',
-              },
-            ],
-            // Forbid optimistic lock conflict flickers
-            ...TransitionValidator.noOptimisticLockFlickers(),
-            // May have extra transitions during deployment
-            allowExtraTransitions: true,
-          };
-
+          // Use pre-built validation rule for happy path
           console.log(`    [TRANSITION_VALIDATION] Validating transitions in ${watchDir}...`);
 
-          const validationResult = TransitionValidator.validate(validationRule, watchDir);
+          const validationResult = TransitionValidator.validate(
+            ValidationRules.happyPath(),
+            watchDir
+          );
 
           // Print formatted result
           const formattedResult = TransitionValidator.formatResult(validationResult);

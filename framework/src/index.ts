@@ -13,6 +13,7 @@ export {
   type ExpectedTransition,
   type ValidationResult,
 } from './transition-validator.js';
+export { ValidationRules } from './validation-rules.js';
 export {
   testServerReachable,
   testCanConnect,

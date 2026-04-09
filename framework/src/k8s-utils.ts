@@ -192,4 +192,104 @@ export class K8sUtils {
       );
     }
   }
+
+  /**
+   * Wait for a condition to match expected values with polling
+   * Polls every 1 second, returns early if match found
+   * More efficient than fixed sleep times
+   *
+   * @param serverName - Name of the MCPServer
+   * @param conditionType - Type of condition (e.g., 'Ready', 'Accepted')
+   * @param expectedStatus - Expected status value (e.g., 'True', 'False', 'Unknown')
+   * @param expectedReason - Expected reason value (e.g., 'Available', 'ConfigurationInvalid')
+   * @param namespace - Kubernetes namespace
+   * @param timeoutSec - Maximum time to wait in seconds
+   * @param pollIntervalMs - Interval between polls in milliseconds (default: 1000ms)
+   */
+  async waitForCondition(
+    serverName: string,
+    conditionType: string,
+    expectedStatus: string,
+    expectedReason: string,
+    namespace: string = 'default',
+    timeoutSec: number = 60,
+    pollIntervalMs: number = 1000
+  ): Promise<void> {
+    const startTime = Date.now();
+    const timeoutMs = timeoutSec * 1000;
+    let lastError: string | undefined;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const condition = await this.getMCPServerCondition(
+          serverName,
+          conditionType,
+          namespace
+        );
+
+        if (
+          condition.status === expectedStatus &&
+          condition.reason === expectedReason
+        ) {
+          const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(
+            `    ✓ Condition matched after ${elapsedSec}s ` +
+            `(${conditionType}=${expectedStatus}, reason=${expectedReason})`
+          );
+          return;
+        }
+
+        // Condition exists but doesn't match - log current state
+        lastError = `Current: ${conditionType}=${condition.status}, reason=${condition.reason}`;
+      } catch (err) {
+        // Condition might not exist yet, continue polling
+        lastError = (err as Error).message;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(
+      `Timeout waiting for ${conditionType}=${expectedStatus} ` +
+      `reason=${expectedReason} after ${timeoutSec}s. ` +
+      `Last state: ${lastError}`
+    );
+  }
+
+  /**
+   * Wait for any condition predicate to be true with polling
+   * More flexible than waitForCondition - allows custom validation logic
+   *
+   * @param check - Async function that returns true when condition is met
+   * @param description - Human-readable description of what we're waiting for
+   * @param timeoutSec - Maximum time to wait in seconds
+   * @param pollIntervalMs - Interval between polls in milliseconds (default: 1000ms)
+   */
+  async waitForPredicate(
+    check: () => Promise<boolean>,
+    description: string,
+    timeoutSec: number = 60,
+    pollIntervalMs: number = 1000
+  ): Promise<void> {
+    const startTime = Date.now();
+    const timeoutMs = timeoutSec * 1000;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        if (await check()) {
+          const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`    ✓ ${description} (after ${elapsedSec}s)`);
+          return;
+        }
+      } catch (err) {
+        // Check might throw if resource doesn't exist yet, continue polling
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error(
+      `Timeout waiting for: ${description} (timeout: ${timeoutSec}s)`
+    );
+  }
 }

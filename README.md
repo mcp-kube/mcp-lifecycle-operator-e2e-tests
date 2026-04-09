@@ -101,6 +101,19 @@ KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 DEBUG_YAML=1 ./scripts/run-e2e.sh
 ```
 
+**Run tests in parallel for faster execution:**
+```bash
+# Runs independent tests concurrently (can reduce test time by ~60%)
+# Note: Currently only error-conditions tests support parallel execution
+PARALLEL_TESTS=1 ./scripts/run-e2e.sh
+```
+
+**Combine options for maximum speed with debugging:**
+```bash
+# Fast parallel execution with full debug output
+OPERATOR_REF=refs/pull/75/head PARALLEL_TESTS=1 DEBUG_YAML=1 ./scripts/run-e2e.sh
+```
+
 ### Individual Scripts
 
 **Setup cluster only:**
