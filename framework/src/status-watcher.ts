@@ -42,16 +42,13 @@ export class StatusWatcher {
     );
     console.log(`    [STATUS_WATCH] Saving transitions to ${this.options.outputDir}`);
 
-    // Wait for resource to be created (poll every 100ms for up to 30 seconds)
-    await this.waitForResource();
-
-    // Start kubectl watch process - use JSON output for easier parsing
+    // Start kubectl watch process - watch all mcpservers and filter for ours
+    // This way we don't fail if the resource doesn't exist yet
     this.process = spawn(
       'kubectl',
       [
         'get',
         'mcpserver',
-        this.options.serverName,
         '-n',
         this.options.namespace,
         '--watch',
@@ -150,6 +147,12 @@ export class StatusWatcher {
    */
   private processDocument(resource: any): void {
     try {
+      // Filter for only the resource we care about
+      const resourceName = resource.metadata?.name;
+      if (resourceName !== this.options.serverName) {
+        return;
+      }
+
       // Extract status section
       const status = resource.status;
       if (!status) {

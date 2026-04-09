@@ -22,21 +22,25 @@ SEQUENCE=0
 echo "[WATCH] Starting status watch for ${SERVER_NAME} in namespace ${NAMESPACE}"
 echo "[WATCH] Output directory: ${OUTPUT_DIR}"
 
-# Wait for resource to be created
-echo "[WATCH] Waiting for resource to be created..."
-for i in {1..300}; do
-  if kubectl get mcpserver "${SERVER_NAME}" -n "${NAMESPACE}" --ignore-not-found -o name 2>/dev/null | grep -q "^mcpserver"; then
-    echo "[WATCH] Resource found, starting watch..."
-    break
-  fi
-  sleep 0.1
-done
-
-# Watch the resource and process each JSON object
-# kubectl watch in JSON mode outputs one JSON object per update
-kubectl get mcpserver "${SERVER_NAME}" -n "${NAMESPACE}" --watch -o json 2>/dev/null | while read -r line; do
+# Watch ALL mcpservers in the namespace (don't wait for it to exist)
+# We'll filter for the specific server name in the processing loop
+kubectl get mcpserver -n "${NAMESPACE}" --watch -o json 2>/dev/null | while read -r line; do
   # Skip empty lines
   if [ -z "$line" ]; then
+    continue
+  fi
+
+  # Check if this is the resource we care about
+  RESOURCE_NAME=$(echo "$line" | python3 -c "
+import sys, json
+try:
+    obj = json.load(sys.stdin)
+    print(obj.get('metadata', {}).get('name', ''))
+except:
+    pass
+" 2>/dev/null || echo "")
+
+  if [ "${RESOURCE_NAME}" != "${SERVER_NAME}" ]; then
     continue
   fi
 

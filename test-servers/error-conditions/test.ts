@@ -138,7 +138,7 @@ async function main() {
         await test(`${testCase.name}: ${testCase.description}`, async () => {
           console.log(`    Deploying ${testCase.serverName}...`);
 
-          // Start status watcher if DEBUG_YAML is enabled
+          // Start status watcher BEFORE deploying if DEBUG_YAML is enabled
           let watcher: StatusWatcher | undefined;
           if (debugYaml) {
             const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
@@ -153,15 +153,15 @@ async function main() {
             const { stdout: manifestContent } = await execAsync(`cat ${manifestPath}`);
             fs.writeFileSync(inputFile, manifestContent);
             console.log(`    [DEBUG_YAML] Input manifest: ${inputFile}`);
+
+            // Start watcher BEFORE deploying to capture all transitions
+            await watcher.start();
+            // Give watcher a moment to start up
+            await sleep(500);
           }
 
           // Deploy the manifest
           await execAsync(`kubectl apply -f ${manifestPath}`);
-
-          // Start watcher after deployment (it will wait for the resource to be created)
-          if (watcher) {
-            await watcher.start();
-          }
 
           // Wait for the condition to stabilize
           const stabilizationTime = testCase.stabilizationTime || 10;
