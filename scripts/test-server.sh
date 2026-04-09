@@ -44,6 +44,10 @@ LOGS_DIR="${PROJECT_ROOT}/logs"
 # Ensure logs directory exists
 mkdir -p "${LOGS_DIR}"
 
+# Status watcher configuration
+DEBUG_YAML=${DEBUG_YAML:-""}
+WATCHER_PID=""
+
 # Validate inputs
 if [ ! -f "${MANIFEST}" ]; then
   error_text "[ERROR] Manifest not found: ${MANIFEST}"
@@ -59,6 +63,20 @@ header_text "[SERVER] Testing ${SERVER_NAME}..."
 
 # Extract namespace from manifest (default to 'default' if not found)
 NAMESPACE=$(grep -A 5 "kind: MCPServer" "${MANIFEST}" | grep "namespace:" | head -1 | awk '{print $2}' || echo "default")
+
+# Start status watcher if DEBUG_YAML is enabled
+if [ "${DEBUG_YAML}" = "1" ] || [ "${DEBUG_YAML}" = "true" ]; then
+  TIMESTAMP=$(date -u +"%Y-%m-%dT%H-%M-%S")
+  WATCH_DIR="${PROJECT_ROOT}/logs/debug-yaml/${SERVER_NAME}-${TIMESTAMP}/status-transitions"
+  mkdir -p "${WATCH_DIR}"
+
+  header_text "[STATUS_WATCH] Starting status watcher..."
+  "${SCRIPT_DIR}/watch-status.sh" "${SERVER_NAME}" "${NAMESPACE}" "${WATCH_DIR}" > "${LOGS_DIR}/${SERVER_NAME}-watcher.log" 2>&1 &
+  WATCHER_PID=$!
+  echo "    [STATUS_WATCH] Watcher PID: ${WATCHER_PID}, output: ${WATCH_DIR}"
+  # Give watcher a moment to start
+  sleep 1
+fi
 
 # Deploy the MCP server
 header_text "[DEPLOY] Applying manifest..."
@@ -110,14 +128,28 @@ header_text "[DEPLOY] Port-forwarding to localhost:8080..."
 kubectl port-forward "svc/${SERVICE_NAME}" 8080:8080 -n "${NAMESPACE}" > /dev/null 2>&1 &
 PF_PID=$!
 
-# Ensure port-forward cleanup on exit
+# Ensure port-forward and watcher cleanup on exit
 cleanup_port_forward() {
   if [ -n "${PF_PID:-}" ]; then
     kill "${PF_PID}" 2>/dev/null || true
     wait "${PF_PID}" 2>/dev/null || true
   fi
 }
-trap cleanup_port_forward EXIT
+
+cleanup_watcher() {
+  if [ -n "${WATCHER_PID:-}" ]; then
+    header_text "[STATUS_WATCH] Stopping watcher..."
+    kill "${WATCHER_PID}" 2>/dev/null || true
+    wait "${WATCHER_PID}" 2>/dev/null || true
+  fi
+}
+
+cleanup_all() {
+  cleanup_port_forward
+  cleanup_watcher
+}
+
+trap cleanup_all EXIT
 
 # Wait for port-forward to be ready
 sleep "${PORT_FORWARD_TIMEOUT}"
@@ -139,8 +171,8 @@ DEPLOYMENT_NAME=$(kubectl get "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" -o js
 kubectl logs "deployment/${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --tail=-1 --all-containers=true > "${LOGS_DIR}/${SERVER_NAME}-pod.log" 2>&1 || true
 kubectl describe "mcpserver/${SERVER_NAME}" -n "${NAMESPACE}" > "${LOGS_DIR}/${SERVER_NAME}-describe.txt" 2>&1 || true
 
-# Cleanup port-forward
-cleanup_port_forward
+# Cleanup port-forward and watcher
+cleanup_all
 trap - EXIT
 
 # Cleanup server (unless KEEP_FAILED_SERVERS=true and tests failed)

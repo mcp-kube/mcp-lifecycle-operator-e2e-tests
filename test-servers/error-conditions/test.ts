@@ -6,7 +6,7 @@
  * status conditions introduced in PR #75.
  */
 
-import { TestFramework, K8sUtils } from '../../framework/src/index.js';
+import { TestFramework, K8sUtils, StatusWatcher } from '../../framework/src/index.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
@@ -138,7 +138,16 @@ async function main() {
         await test(`${testCase.name}: ${testCase.description}`, async () => {
           console.log(`    Deploying ${testCase.serverName}...`);
 
+          // Start status watcher if DEBUG_YAML is enabled
+          let watcher: StatusWatcher | undefined;
           if (debugYaml) {
+            const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
+            watcher = new StatusWatcher({
+              serverName: testCase.serverName,
+              namespace,
+              outputDir: watchDir,
+            });
+
             // Write input manifest to file
             const inputFile = path.join(debugDir, `${testCase.serverName}-input.yaml`);
             const { stdout: manifestContent } = await execAsync(`cat ${manifestPath}`);
@@ -148,6 +157,11 @@ async function main() {
 
           // Deploy the manifest
           await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Start watcher after deployment (it will wait for the resource to be created)
+          if (watcher) {
+            await watcher.start();
+          }
 
           // Wait for the condition to stabilize
           const stabilizationTime = testCase.stabilizationTime || 10;
@@ -211,6 +225,11 @@ async function main() {
             );
             fs.writeFileSync(outputFile, statusYaml);
             console.log(`    [DEBUG_YAML] Output status: ${outputFile}`);
+
+            // Stop watcher
+            if (watcher) {
+              watcher.stop();
+            }
           }
 
           // Cleanup

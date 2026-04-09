@@ -6,6 +6,7 @@
 export { MCPClient } from './mcp-client.js';
 export { TestFramework } from './test-framework.js';
 export { K8sUtils } from './k8s-utils.js';
+export { StatusWatcher } from './status-watcher.js';
 export {
   testServerReachable,
   testCanConnect,

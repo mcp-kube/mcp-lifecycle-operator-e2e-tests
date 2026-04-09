@@ -92,14 +92,20 @@ DEBUG_YAML=1 ./scripts/run-e2e.sh
 Set `DEBUG_YAML=1` to capture detailed YAML for each test:
 - **Input Manifest**: The MCPServer manifest being tested
 - **Output Status**: The resulting status with conditions, observedGeneration, etc.
+- **Status Transitions**: All status changes from creation to final state
 
 Files are written to: `logs/debug-yaml/error-conditions-{timestamp}/`
 - `{server-name}-input.yaml` - Input manifest for each error scenario
 - `{server-name}-output.yaml` - Full MCPServer YAML with status
+- `{server-name}-status-transitions/` - Directory containing all status transitions:
+  - `status-transition-01-{timestamp}.yaml` - Initial state (often `Initializing`)
+  - `status-transition-02-{timestamp}.yaml` - Next state
+  - ... etc
 
 This is useful for:
 - Understanding exactly what's being tested
-- Debugging condition transitions
+- **Capturing transient states** like `Initializing` that are hard to test directly
+- Debugging condition transitions and timing
 - Documenting operator behavior
 - Comparing different test runs
 - Creating documentation examples

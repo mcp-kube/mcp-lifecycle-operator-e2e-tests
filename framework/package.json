@@ -17,6 +17,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.1",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
