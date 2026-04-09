@@ -110,13 +110,12 @@ const testCases: TestCase[] = [
     transitionValidation: {
       name: 'ImagePullBackOff should show DeploymentUnavailable',
       expectedTransitions: [
-        // Final state should be DeploymentUnavailable due to image pull failure
+        // Image pull fails - goes directly to DeploymentUnavailable
+        // (No Initializing state observed in practice)
         {
           conditionType: 'Ready',
           status: 'False',
           reason: 'DeploymentUnavailable',
-          // Should NOT be due to optimistic lock conflict
-          messageNotContains: 'object has been modified',
         },
       ],
       // Forbid optimistic lock conflict flickers

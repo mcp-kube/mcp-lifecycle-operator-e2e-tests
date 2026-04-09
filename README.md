@@ -77,6 +77,14 @@ OPERATOR_REPO=https://github.com/username/mcp-lifecycle-operator OPERATOR_REF=fe
 GITHUB_TOKEN=ghp_yourtoken OPERATOR_REPO=https://github.com/username/private-fork OPERATOR_REF=branch ./scripts/run-e2e.sh
 ```
 
+**Test with specific Pull Request (e.g., PR #75):**
+```bash
+# Tests against a specific PR from the upstream repository
+# Note: The condition-based status tests (error-conditions and operator-features)
+# expect the PR #75 status format (Accepted + Ready conditions, observedGeneration, etc.)
+OPERATOR_REF=refs/pull/75/head ./scripts/run-e2e.sh
+```
+
 **Keep cluster after tests for debugging:**
 ```bash
 KEEP_CLUSTER=true ./scripts/run-e2e.sh

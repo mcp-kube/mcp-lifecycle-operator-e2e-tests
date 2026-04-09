@@ -9,7 +9,15 @@
  * - Environment variables from multiple sources (plain, secrets, configmaps)
  */
 
-import { MCPClient, TestFramework, runCommonTests, K8sUtils } from '../../framework/src/index.js';
+import {
+  MCPClient,
+  TestFramework,
+  runCommonTests,
+  K8sUtils,
+  StatusWatcher,
+  TransitionValidator,
+  type TransitionValidationRule,
+} from '../../framework/src/index.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
@@ -20,19 +28,43 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function main() {
   const framework = new TestFramework('operator-features');
   // Use HTTP transport for this server with custom path
   const client = new MCPClient('http://localhost:8080/custom/test/path', { transport: 'http' });
   const debugYaml = process.env.DEBUG_YAML === '1' || process.env.DEBUG_YAML === 'true';
+  const serverName = 'operator-features';
+  const namespace = 'default';
 
   // Create debug output directory if DEBUG_YAML is enabled
   let debugDir = '';
+  let watcher: StatusWatcher | undefined;
+  let watchDir = '';
+
   if (debugYaml) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     debugDir = path.join(__dirname, '../../logs/debug-yaml', `operator-features-${timestamp}`);
     fs.mkdirSync(debugDir, { recursive: true });
     console.log(`    [DEBUG_YAML] Output directory: ${debugDir}`);
+
+    // Start status watcher to capture all transitions
+    // Note: The operator-features server is deployed by test-server.sh script,
+    // so we start watching early to capture initial deployment transitions
+    watchDir = path.join(debugDir, `${serverName}-status-transitions`);
+    watcher = new StatusWatcher({
+      serverName,
+      namespace,
+      outputDir: watchDir,
+    });
+
+    console.log(`    [DEBUG_YAML] Starting status watcher for ${serverName}...`);
+    await watcher.start();
+    // Give watcher a moment to start up
+    await sleep(500);
   }
 
   try {
@@ -693,8 +725,6 @@ async function main() {
       // ----- Operator Status Conditions (PR #75 Features) -----
 
       const k8s = new K8sUtils();
-      const serverName = 'operator-features';
-      const namespace = 'default';
 
       if (debugYaml) {
         console.log('    ═══════════════════════════════════════════════');
@@ -788,6 +818,56 @@ async function main() {
         fs.writeFileSync(fullYamlFile, fullYaml);
         console.log(`    [DEBUG_YAML] Full YAML: ${fullYamlFile}`);
         console.log('    ═══════════════════════════════════════════════');
+
+        // Stop watcher and validate transitions
+        if (watcher) {
+          console.log('    ═══════════════════════════════════════════════');
+          console.log('    ═══ Status Transition Validation ═══');
+          console.log('    ═══════════════════════════════════════════════');
+
+          watcher.stop();
+
+          // Wait a moment for watcher to write final transitions
+          await sleep(500);
+
+          // Define validation rule for operator-features (happy path)
+          const validationRule: TransitionValidationRule = {
+            name: 'operator-features should transition smoothly to Available',
+            expectedTransitions: [
+              // May start with Initializing (if we caught it early enough)
+              {
+                conditionType: 'Ready',
+                status: 'Unknown',
+                reason: 'Initializing',
+              },
+              // Should reach Available state
+              {
+                conditionType: 'Ready',
+                status: 'True',
+                reason: 'Available',
+              },
+            ],
+            // Forbid optimistic lock conflict flickers
+            ...TransitionValidator.noOptimisticLockFlickers(),
+            // May have extra transitions during deployment
+            allowExtraTransitions: true,
+          };
+
+          console.log(`    [TRANSITION_VALIDATION] Validating transitions in ${watchDir}...`);
+
+          const validationResult = TransitionValidator.validate(validationRule, watchDir);
+
+          // Print formatted result
+          const formattedResult = TransitionValidator.formatResult(validationResult);
+          console.log(formattedResult.split('\n').map(line => `    ${line}`).join('\n'));
+
+          if (!validationResult.passed) {
+            console.error('    [TRANSITION_VALIDATION] ⚠️  Validation failed but continuing (non-fatal)');
+            console.error(`    Errors:\n${validationResult.errors.map(e => `      - ${e}`).join('\n')}`);
+          }
+
+          console.log('    ═══════════════════════════════════════════════');
+        }
       }
 
       // Cleanup: Disconnect from server
