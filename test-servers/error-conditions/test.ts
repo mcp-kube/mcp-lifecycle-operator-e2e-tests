@@ -6,7 +6,13 @@
  * status conditions introduced in PR #75.
  */
 
-import { TestFramework, K8sUtils, StatusWatcher } from '../../framework/src/index.js';
+import {
+  TestFramework,
+  K8sUtils,
+  StatusWatcher,
+  TransitionValidator,
+  type TransitionValidationRule,
+} from '../../framework/src/index.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
@@ -28,6 +34,8 @@ interface TestCase {
   description: string;
   // How long to wait for the condition to stabilize (some errors take time to appear)
   stabilizationTime?: number;
+  // Expected transition validation rule
+  transitionValidation?: TransitionValidationRule;
 }
 
 const testCases: TestCase[] = [
@@ -41,6 +49,20 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'ConfigurationInvalid',
     description: 'Secret referenced in storage does not exist',
     stabilizationTime: 5,
+    transitionValidation: {
+      name: 'ConfigurationInvalid should be immediate',
+      expectedTransitions: [
+        {
+          conditionType: 'Ready',
+          status: 'False',
+          reason: 'ConfigurationInvalid',
+          messageContains: 'Configuration must be fixed',
+        },
+      ],
+      // Configuration errors should be detected immediately - no flickers
+      ...TransitionValidator.noOptimisticLockFlickers(),
+      allowExtraTransitions: false, // Expect exactly 1 transition
+    },
   },
   {
     name: 'Missing ConfigMap in storage',
@@ -85,6 +107,23 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'DeploymentUnavailable',
     description: 'Non-existent image causes ImagePullBackOff',
     stabilizationTime: 60, // Image pull errors take time to appear
+    transitionValidation: {
+      name: 'ImagePullBackOff should show DeploymentUnavailable',
+      expectedTransitions: [
+        // Final state should be DeploymentUnavailable due to image pull failure
+        {
+          conditionType: 'Ready',
+          status: 'False',
+          reason: 'DeploymentUnavailable',
+          // Should NOT be due to optimistic lock conflict
+          messageNotContains: 'object has been modified',
+        },
+      ],
+      // Forbid optimistic lock conflict flickers
+      ...TransitionValidator.noOptimisticLockFlickers(),
+      // May have multiple transitions as deployment stabilizes
+      allowExtraTransitions: true,
+    },
   },
   {
     name: 'CrashLoopBackOff',
@@ -107,6 +146,21 @@ const testCases: TestCase[] = [
     expectedReadyReason: 'ScaledToZero',
     description: 'Deployment scaled to 0 replicas',
     stabilizationTime: 10,
+    transitionValidation: {
+      name: 'ScaledToZero should not flicker',
+      expectedTransitions: [
+        {
+          conditionType: 'Ready',
+          status: 'True',
+          reason: 'ScaledToZero',
+          messageContains: 'scaled to 0 replicas',
+        },
+      ],
+      // Forbid optimistic lock conflict flickers
+      ...TransitionValidator.noOptimisticLockFlickers(),
+      // Allow extra transitions for now (we might see multiple updates during reconciliation)
+      allowExtraTransitions: true,
+    },
   },
 ];
 
@@ -229,6 +283,27 @@ async function main() {
             // Stop watcher
             if (watcher) {
               watcher.stop();
+            }
+
+            // Validate status transitions if validation rule is defined
+            if (testCase.transitionValidation) {
+              const watchDir = path.join(debugDir, `${testCase.serverName}-status-transitions`);
+              console.log(`    [TRANSITION_VALIDATION] Validating transitions...`);
+
+              const validationResult = TransitionValidator.validate(
+                testCase.transitionValidation,
+                watchDir
+              );
+
+              // Print formatted result
+              const formattedResult = TransitionValidator.formatResult(validationResult);
+              console.log(formattedResult.split('\n').map(line => `    ${line}`).join('\n'));
+
+              // Fail test if validation failed
+              test.assert(
+                validationResult.passed,
+                `Transition validation failed:\n${validationResult.errors.join('\n')}`
+              );
             }
           }
 
