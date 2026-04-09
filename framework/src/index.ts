@@ -12,6 +12,8 @@ export {
   type TransitionValidationRule,
   type ExpectedTransition,
   type ValidationResult,
+  type TransitionTiming,
+  type ActualTransition,
 } from './transition-validator.js';
 export { ValidationRules } from './validation-rules.js';
 export {

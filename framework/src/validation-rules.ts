@@ -89,6 +89,8 @@ export class ValidationRules {
       ...TransitionValidator.noOptimisticLockFlickers(),
       // Should be immediate - no extra transitions
       allowExtraTransitions: false,
+      // Configuration validation should be fast (< 5s)
+      maxTotalDurationSec: 5,
     };
   }
 

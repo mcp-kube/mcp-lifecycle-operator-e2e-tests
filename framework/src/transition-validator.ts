@@ -43,6 +43,12 @@ export interface TransitionValidationRule {
 
   // Require exact match of transition count (default: false)
   strictCount?: boolean;
+
+  // Maximum time in seconds between first and last transition (default: no limit)
+  maxTotalDurationSec?: number;
+
+  // Maximum time in seconds between any two consecutive transitions (default: no limit)
+  maxTransitionDurationSec?: number;
 }
 
 export interface ActualTransition {
@@ -99,6 +105,64 @@ export class TransitionValidator {
     }
 
     return transitions;
+  }
+
+  /**
+   * Analyze timing between transitions
+   */
+  static analyzeTiming(
+    transitions: ActualTransition[],
+    conditionType: 'Ready' | 'Accepted' = 'Ready'
+  ): ValidationResult['timing'] | undefined {
+    if (transitions.length < 2) {
+      return undefined; // Need at least 2 transitions for timing
+    }
+
+    const transitionTimings: TransitionTiming[] = [];
+    let totalDurationMs = 0;
+
+    for (let i = 0; i < transitions.length - 1; i++) {
+      const from = transitions[i];
+      const to = transitions[i + 1];
+
+      // Parse timestamps
+      const fromTime = new Date(from.timestamp).getTime();
+      const toTime = new Date(to.timestamp).getTime();
+      const durationMs = toTime - fromTime;
+
+      // Get reasons
+      const fromCondition = from.conditions.find((c) => c.type === conditionType);
+      const toCondition = to.conditions.find((c) => c.type === conditionType);
+
+      transitionTimings.push({
+        fromSequence: from.sequenceNumber,
+        toSequence: to.sequenceNumber,
+        fromTimestamp: from.timestamp,
+        toTimestamp: to.timestamp,
+        durationMs,
+        durationSec: durationMs / 1000,
+        fromReason: fromCondition?.reason || 'unknown',
+        toReason: toCondition?.reason || 'unknown',
+      });
+    }
+
+    // Calculate total duration (first to last)
+    const firstTime = new Date(transitions[0].timestamp).getTime();
+    const lastTime = new Date(transitions[transitions.length - 1].timestamp).getTime();
+    totalDurationMs = lastTime - firstTime;
+
+    // Find slowest transition
+    const slowestTransition = transitionTimings.reduce(
+      (max, current) => (current.durationMs > max.durationMs ? current : max),
+      transitionTimings[0]
+    );
+
+    return {
+      totalDurationMs,
+      totalDurationSec: totalDurationMs / 1000,
+      transitionTimings,
+      slowestTransition,
+    };
   }
 
   /**
@@ -236,6 +300,34 @@ export class TransitionValidator {
       }
     }
 
+    // Analyze timing if we have transitions
+    let timing: ValidationResult['timing'] | undefined;
+    if (actual.length >= 2) {
+      const conditionType = rule.expectedTransitions[0]?.conditionType || 'Ready';
+      timing = this.analyzeTiming(actual, conditionType);
+
+      // Check timing constraints
+      if (timing && rule.maxTotalDurationSec) {
+        if (timing.totalDurationSec > rule.maxTotalDurationSec) {
+          errors.push(
+            `❌ Total transition duration (${timing.totalDurationSec.toFixed(1)}s) ` +
+              `exceeds maximum (${rule.maxTotalDurationSec}s)`
+          );
+        }
+      }
+
+      if (timing && rule.maxTransitionDurationSec) {
+        for (const t of timing.transitionTimings) {
+          if (t.durationSec > rule.maxTransitionDurationSec) {
+            warnings.push(
+              `⚠️  Slow transition detected: ${t.fromReason} → ${t.toReason} ` +
+                `took ${t.durationSec.toFixed(1)}s (max: ${rule.maxTransitionDurationSec}s)`
+            );
+          }
+        }
+      }
+    }
+
     return {
       passed: errors.length === 0,
       errors,
@@ -243,6 +335,7 @@ export class TransitionValidator {
       actualTransitionCount: actual.length,
       expectedTransitionCount: rule.expectedTransitions.length,
       actualTransitions: actual,
+      timing,
     };
   }
 
@@ -277,6 +370,19 @@ export class TransitionValidator {
     lines.push(`📊 Transition Validation Results:`);
     lines.push(`   Transitions captured: ${result.actualTransitionCount}`);
     lines.push(`   Transitions expected: ${result.expectedTransitionCount}`);
+
+    // Add timing information if available
+    if (result.timing) {
+      lines.push(`   Total duration: ${result.timing.totalDurationSec.toFixed(1)}s`);
+      if (result.timing.slowestTransition) {
+        const t = result.timing.slowestTransition;
+        lines.push(
+          `   Slowest transition: ${t.fromReason} → ${t.toReason} ` +
+            `(${t.durationSec.toFixed(1)}s)`
+        );
+      }
+    }
+
     lines.push('');
 
     if (result.errors.length > 0) {
@@ -299,6 +405,17 @@ export class TransitionValidator {
   }
 }
 
+export interface TransitionTiming {
+  fromSequence: number;
+  toSequence: number;
+  fromTimestamp: string;
+  toTimestamp: string;
+  durationMs: number;
+  durationSec: number;
+  fromReason: string;
+  toReason: string;
+}
+
 export interface ValidationResult {
   passed: boolean;
   errors: string[];
@@ -306,4 +423,10 @@ export interface ValidationResult {
   actualTransitionCount: number;
   expectedTransitionCount: number;
   actualTransitions: ActualTransition[];
+  timing?: {
+    totalDurationMs: number;
+    totalDurationSec: number;
+    transitionTimings: TransitionTiming[];
+    slowestTransition?: TransitionTiming;
+  };
 }
