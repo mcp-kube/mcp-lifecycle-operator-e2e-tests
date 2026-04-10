@@ -60,7 +60,7 @@ const testCases: UpdateTestCase[] = [
         source: {
           type: 'ContainerImage',
           containerImage: {
-            ref: 'ghcr.io/modelcontextprotocol/servers/everything:latest',
+            ref: 'quay.io/containers/kubernetes_mcp_server:latest',
           },
         },
         config: {
@@ -101,7 +101,7 @@ const testCases: UpdateTestCase[] = [
         source: {
           type: 'ContainerImage',
           containerImage: {
-            ref: 'ghcr.io/modelcontextprotocol/servers/everything:latest',
+            ref: 'quay.io/containers/kubernetes_mcp_server:latest',
           },
         },
         config: {
@@ -124,7 +124,7 @@ const testCases: UpdateTestCase[] = [
     },
     expectedBehavior: {
       maintainsReady: true,
-      expectRestart: false,
+      expectRestart: true, // Pods change when scaling down (2 terminated)
       expectedReadyReason: 'Available',
     },
   },
@@ -142,7 +142,7 @@ const testCases: UpdateTestCase[] = [
         source: {
           type: 'ContainerImage',
           containerImage: {
-            ref: 'ghcr.io/modelcontextprotocol/servers/everything:latest',
+            ref: 'quay.io/containers/kubernetes_mcp_server:latest',
           },
         },
         config: {
@@ -194,7 +194,7 @@ const testCases: UpdateTestCase[] = [
         source: {
           type: 'ContainerImage',
           containerImage: {
-            ref: 'ghcr.io/modelcontextprotocol/servers/everything:latest',
+            ref: 'quay.io/containers/kubernetes_mcp_server:latest',
           },
         },
         config: {
