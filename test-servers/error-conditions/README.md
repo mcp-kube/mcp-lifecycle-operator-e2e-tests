@@ -22,6 +22,7 @@ Indicates overall server operational status.
 - `Available` (Status=True) - Server is ready, at least one instance healthy
 - `ConfigurationInvalid` (Status=False) - Accepted=False, cannot proceed
 - `DeploymentUnavailable` (Status=False) - No healthy instances (ImagePullBackOff, CrashLoopBackOff, etc.)
+- `ServiceUnavailable` (Status=False) - Service reconciliation failed (tested in operator unit tests)
 - `ScaledToZero` (Status=True) - Deployment scaled to 0 replicas (following Kubernetes Deployment semantics)
 - `Initializing` (Status=Unknown) - Waiting for initial deployment status
 
@@ -112,7 +113,7 @@ This is useful for:
 
 ## Expected Results
 
-All 8 test cases (7 error scenarios + 1 placeholder) should pass, validating:
+All 7 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked
@@ -124,3 +125,4 @@ All 8 test cases (7 error scenarios + 1 placeholder) should pass, validating:
 - Tests clean up after themselves by deleting MCPServer resources
 - Some tests have longer stabilization times to allow errors to manifest
 - The `Initializing` reason is transient and difficult to test reliably, so it's not included
+- **`ServiceUnavailable`** is tested in operator unit tests (`internal/controller/mcpserver_controller_test.go`) rather than E2E tests. Simulating Service reconciliation failures requires API client interceptors, which are not feasible in real cluster environments.

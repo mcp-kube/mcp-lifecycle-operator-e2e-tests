@@ -121,6 +121,10 @@ const testCases: TestCase[] = [
     stabilizationTime: 10,
     transitionValidation: ValidationRules.scaledToZero(),
   },
+  // Note: ServiceUnavailable reason is tested in operator unit tests
+  // (internal/controller/mcpserver_controller_test.go - Service Reconciliation Failures)
+  // E2E testing of Service reconciliation failures requires API client interceptors,
+  // which is not feasible in real cluster environments.
 ];
 
 async function sleep(ms: number): Promise<void> {
@@ -276,7 +280,8 @@ async function runTestCase(
 
     // Cleanup
     console.log(`    Cleaning up ${testCase.serverName}...`);
-    await execAsync(`kubectl delete mcpserver ${testCase.serverName} -n ${namespace} --ignore-not-found=true`);
+    // Delete all resources from the manifest (Services, MCPServers, etc.)
+    await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
 
     // Wait a bit for cleanup to complete
     await sleep(2000);
