@@ -34,15 +34,19 @@ Indicates overall server operational status.
 2. **Missing ConfigMap in storage** - ConfigMap referenced in `spec.config.storage` does not exist
 3. **Missing Secret in envFrom** - Secret referenced in `spec.config.envFrom` does not exist
 4. **Missing ConfigMap in envFrom** - ConfigMap referenced in `spec.config.envFrom` does not exist
+5. **Empty ConfigMap name in storage** - ConfigMap name in storage mount is empty
+6. **Empty Secret name in storage** - Secret name in storage mount is empty
+
+**Note:** Empty ContainerImage ref is validated at the CRD/API level (OpenAPI schema), not in the operator controller, so it's rejected before reaching reconciliation.
 
 ### Deployment Availability (Ready=False, DeploymentUnavailable)
 
-5. **ImagePullBackOff** - Non-existent image causes image pull failures
-6. **CrashLoopBackOff** - Container crashes immediately on startup
+7. **ImagePullBackOff** - Non-existent image causes image pull failures
+8. **CrashLoopBackOff** - Container crashes immediately on startup
 
 ### Scaling (Ready=True, ScaledToZero)
 
-7. **ScaledToZero** - Deployment configured with 0 replicas (intentional, valid state following Kubernetes Deployment semantics)
+9. **ScaledToZero** - Deployment configured with 0 replicas (intentional, valid state following Kubernetes Deployment semantics)
 
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
@@ -57,6 +61,8 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `05-image-pull-backoff.yaml`
 - `06-crash-loop-backoff.yaml`
 - `07-scaled-to-zero.yaml`
+- `08-empty-configmap-name-storage.yaml`
+- `09-empty-secret-name-storage.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -113,7 +119,7 @@ This is useful for:
 
 ## Expected Results
 
-All 7 test cases should pass, validating:
+All 9 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

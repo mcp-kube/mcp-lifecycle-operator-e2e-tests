@@ -121,6 +121,28 @@ const testCases: TestCase[] = [
     stabilizationTime: 10,
     transitionValidation: ValidationRules.scaledToZero(),
   },
+  {
+    name: 'Empty ConfigMap name in storage',
+    manifestFile: '08-empty-configmap-name-storage.yaml',
+    serverName: 'error-empty-configmap-name-storage',
+    expectedAcceptedStatus: 'False',
+    expectedAcceptedReason: 'Invalid',
+    expectedReadyStatus: 'False',
+    expectedReadyReason: 'ConfigurationInvalid',
+    description: 'ConfigMap name in storage is empty',
+    stabilizationTime: 5,
+  },
+  {
+    name: 'Empty Secret name in storage',
+    manifestFile: '09-empty-secret-name-storage.yaml',
+    serverName: 'error-empty-secret-name-storage',
+    expectedAcceptedStatus: 'False',
+    expectedAcceptedReason: 'Invalid',
+    expectedReadyStatus: 'False',
+    expectedReadyReason: 'ConfigurationInvalid',
+    description: 'Secret name in storage is empty',
+    stabilizationTime: 5,
+  },
   // Note: ServiceUnavailable reason is tested in operator unit tests
   // (internal/controller/mcpserver_controller_test.go - Service Reconciliation Failures)
   // E2E testing of Service reconciliation failures requires API client interceptors,
