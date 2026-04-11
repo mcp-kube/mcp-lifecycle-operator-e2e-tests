@@ -48,6 +48,14 @@ Indicates overall server operational status.
 
 9. **ScaledToZero** - Deployment configured with 0 replicas (intentional, valid state following Kubernetes Deployment semantics)
 
+### Recovery Scenarios (Error → Success transitions)
+
+10. **Recovery: Fix missing ConfigMap** - Deploy with missing ConfigMap reference, then create the ConfigMap and verify recovery
+   - Initial state: `Accepted=False, Invalid` → `Ready=False, ConfigurationInvalid`
+   - Create missing ConfigMap during test
+   - Verify: `Accepted=True, Valid` → `Ready=True, Available`
+   - Validates: lastTransitionTime updates, observedGeneration advances, operator properly recovers from errors
+
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
 ## Implementation Details
@@ -63,6 +71,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `07-scaled-to-zero.yaml`
 - `08-empty-configmap-name-storage.yaml`
 - `09-empty-secret-name-storage.yaml`
+- `10-recovery-missing-configmap.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -119,7 +128,7 @@ This is useful for:
 
 ## Expected Results
 
-All 9 test cases should pass, validating:
+All 10 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

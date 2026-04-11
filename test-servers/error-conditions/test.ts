@@ -376,6 +376,143 @@ async function main() {
           await runTestCase(testCase, test, k8s, namespace, manifestsDir, debugDir, debugYaml);
         }
       }
+
+      // Recovery test: Fix missing ConfigMap
+      await test('Recovery: Fix missing ConfigMap', async () => {
+        const serverName = 'recovery-missing-configmap';
+        const configMapName = 'recovery-test-configmap';
+        const manifestPath = path.join(manifestsDir, '10-recovery-missing-configmap.yaml');
+
+        console.log(`    Testing recovery from missing ConfigMap...`);
+
+        try {
+          // Step 1: Deploy MCPServer with missing ConfigMap
+          console.log(`    [1/6] Deploying ${serverName} with missing ConfigMap...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=False, Invalid
+          console.log(`    [2/6] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Accepted',
+            'False',
+            'Invalid',
+            namespace,
+            10
+          );
+
+          const initialAcceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          const initialAcceptedTransitionTime = initialAcceptedCondition.lastTransitionTime;
+          const initialReadyTransitionTime = initialReadyCondition.lastTransitionTime;
+
+          console.log(`    Initial Accepted: status=${initialAcceptedCondition.status}, reason=${initialAcceptedCondition.reason}`);
+          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
+
+          // Verify initial error state
+          test.assertEqual(initialAcceptedCondition.status, 'False', 'Accepted should be False initially');
+          test.assertEqual(initialAcceptedCondition.reason, 'Invalid', 'Accepted reason should be Invalid');
+          test.assertEqual(initialReadyCondition.status, 'False', 'Ready should be False initially');
+          test.assertEqual(initialReadyCondition.reason, 'ConfigurationInvalid', 'Ready reason should be ConfigurationInvalid');
+          test.assert(
+            initialAcceptedCondition.message.includes(configMapName),
+            `Accepted message should mention ConfigMap name: ${initialAcceptedCondition.message}`
+          );
+
+          // Step 3: Create the missing ConfigMap
+          console.log(`    [3/6] Creating missing ConfigMap ${configMapName}...`);
+          const configMapYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  namespace: ${namespace}
+data:
+  config.json: '{"test": "data"}'
+`;
+          const configMapFile = `/tmp/${configMapName}.yaml`;
+          fs.writeFileSync(configMapFile, configMapYaml);
+          await execAsync(`kubectl apply -f ${configMapFile}`);
+
+          // Trigger reconciliation by updating the MCPServer spec (bump generation)
+          // We add a harmless environment variable to trigger reconciliation
+          console.log(`    Triggering reconciliation by updating MCPServer spec...`);
+          const patchJson = {
+            spec: {
+              config: {
+                env: [
+                  {
+                    name: 'RECOVERY_TRIGGER',
+                    value: new Date().getTime().toString()
+                  }
+                ]
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 4: Wait for Accepted=True, Valid
+          console.log(`    [4/6] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Accepted',
+            'True',
+            'Valid',
+            namespace,
+            30
+          );
+
+          const recoveredAcceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          console.log(`    Recovered Accepted: status=${recoveredAcceptedCondition.status}, reason=${recoveredAcceptedCondition.reason}`);
+
+          test.assertEqual(recoveredAcceptedCondition.status, 'True', 'Accepted should be True after recovery');
+          test.assertEqual(recoveredAcceptedCondition.reason, 'Valid', 'Accepted reason should be Valid after recovery');
+
+          // Verify lastTransitionTime changed for Accepted condition
+          test.assert(
+            recoveredAcceptedCondition.lastTransitionTime !== initialAcceptedTransitionTime,
+            `Accepted lastTransitionTime should change (was ${initialAcceptedTransitionTime}, now ${recoveredAcceptedCondition.lastTransitionTime})`
+          );
+
+          // Step 5: Wait for Ready=True, Available
+          console.log(`    [5/6] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Ready',
+            'True',
+            'Available',
+            namespace,
+            60
+          );
+
+          const recoveredReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          console.log(`    Recovered Ready: status=${recoveredReadyCondition.status}, reason=${recoveredReadyCondition.reason}`);
+
+          test.assertEqual(recoveredReadyCondition.status, 'True', 'Ready should be True after deployment succeeds');
+          test.assertEqual(recoveredReadyCondition.reason, 'Available', 'Ready reason should be Available');
+
+          // Verify lastTransitionTime changed for Ready condition
+          test.assert(
+            recoveredReadyCondition.lastTransitionTime !== initialReadyTransitionTime,
+            `Ready lastTransitionTime should change (was ${initialReadyTransitionTime}, now ${recoveredReadyCondition.lastTransitionTime})`
+          );
+
+          // Step 6: Verify observedGeneration is set
+          console.log(`    [6/6] Verifying status fields...`);
+          const observedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
+          test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
+
+          console.log(`    ✓ Recovery successful: Accepted=True, Ready=True`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);

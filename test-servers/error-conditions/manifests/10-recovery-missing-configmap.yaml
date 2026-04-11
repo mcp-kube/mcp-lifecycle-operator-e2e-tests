@@ -1,0 +1,22 @@
+---
+# Test Case: Recovery from missing ConfigMap
+# Scenario: Deploy with missing ConfigMap, then create it and verify recovery
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: recovery-missing-configmap
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: recovery-test-configmap  # Will be created after initial deployment
