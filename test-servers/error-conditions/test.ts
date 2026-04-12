@@ -1453,6 +1453,137 @@ EOF`);
           await sleep(2000);
         }
       });
+
+      // Test 6.1: Condition observedGeneration consistency
+      await test('Condition observedGeneration consistency: All conditions match status.observedGeneration', async () => {
+        const serverName = 'observedgeneration-consistency';
+        const manifestPath = path.join(manifestsDir, '23-observedgeneration-consistency.yaml');
+
+        try {
+          console.log(`    Testing condition observedGeneration consistency...`);
+          console.log(`    [1/6] Deploying initial configuration...`);
+
+          // Deploy MCPServer
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Ready=True, Available
+          console.log(`    [2/6] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 2: Verify all observedGenerations match (initial state)
+          console.log(`    [3/6] Verifying observedGeneration consistency (initial state)...`);
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+
+          const statusObservedGeneration = initialServer.status.observedGeneration;
+          const acceptedCondition = initialServer.status.conditions.find((c: any) => c.type === 'Accepted');
+          const readyCondition = initialServer.status.conditions.find((c: any) => c.type === 'Ready');
+
+          test.assert(acceptedCondition, 'Accepted condition should exist');
+          test.assert(readyCondition, 'Ready condition should exist');
+
+          const acceptedObservedGeneration = acceptedCondition.observedGeneration;
+          const readyObservedGeneration = readyCondition.observedGeneration;
+
+          console.log(`    Initial state:`);
+          console.log(`      status.observedGeneration: ${statusObservedGeneration}`);
+          console.log(`      Accepted.observedGeneration: ${acceptedObservedGeneration}`);
+          console.log(`      Ready.observedGeneration: ${readyObservedGeneration}`);
+
+          test.assertEqual(
+            acceptedObservedGeneration,
+            statusObservedGeneration,
+            `Accepted.observedGeneration should match status.observedGeneration`
+          );
+          test.assertEqual(
+            readyObservedGeneration,
+            statusObservedGeneration,
+            `Ready.observedGeneration should match status.observedGeneration`
+          );
+
+          console.log(`    ✓ All observedGenerations match: ${statusObservedGeneration}`);
+
+          // Step 3: Perform spec update (scale to 2 replicas)
+          console.log(`    [4/6] Performing spec update (scaling to 2 replicas)...`);
+          const patchJson = {
+            spec: {
+              runtime: {
+                replicas: 2
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 4: Wait for observedGeneration to advance
+          console.log(`    [5/6] Waiting for reconciliation (observedGeneration should advance)...`);
+          const expectedGeneration = statusObservedGeneration + 1;
+
+          // Poll for observedGeneration to catch up
+          let currentObservedGeneration = statusObservedGeneration;
+          const maxAttempts = 30;
+          for (let i = 0; i < maxAttempts; i++) {
+            const serverJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+            const server = JSON.parse(serverJson.stdout);
+            currentObservedGeneration = server.status.observedGeneration;
+
+            if (currentObservedGeneration === expectedGeneration) {
+              console.log(`    ✓ observedGeneration advanced to ${expectedGeneration} (after ${i * 0.5}s)`);
+              break;
+            }
+
+            if (i === maxAttempts - 1) {
+              throw new Error(
+                `Timeout waiting for observedGeneration to advance to ${expectedGeneration}, stuck at ${currentObservedGeneration}`
+              );
+            }
+
+            await sleep(500);
+          }
+
+          // Step 5: Verify all observedGenerations match again (after update)
+          console.log(`    [6/6] Verifying observedGeneration consistency (after update)...`);
+          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const updatedServer = JSON.parse(updatedServerJson.stdout);
+
+          const updatedStatusObservedGeneration = updatedServer.status.observedGeneration;
+          const updatedAcceptedCondition = updatedServer.status.conditions.find((c: any) => c.type === 'Accepted');
+          const updatedReadyCondition = updatedServer.status.conditions.find((c: any) => c.type === 'Ready');
+
+          const updatedAcceptedObservedGeneration = updatedAcceptedCondition.observedGeneration;
+          const updatedReadyObservedGeneration = updatedReadyCondition.observedGeneration;
+
+          console.log(`    Updated state:`);
+          console.log(`      status.observedGeneration: ${updatedStatusObservedGeneration}`);
+          console.log(`      Accepted.observedGeneration: ${updatedAcceptedObservedGeneration}`);
+          console.log(`      Ready.observedGeneration: ${updatedReadyObservedGeneration}`);
+
+          test.assertEqual(
+            updatedAcceptedObservedGeneration,
+            updatedStatusObservedGeneration,
+            `Accepted.observedGeneration should match status.observedGeneration after update`
+          );
+          test.assertEqual(
+            updatedReadyObservedGeneration,
+            updatedStatusObservedGeneration,
+            `Ready.observedGeneration should match status.observedGeneration after update`
+          );
+          test.assertEqual(
+            updatedStatusObservedGeneration,
+            expectedGeneration,
+            `status.observedGeneration should be ${expectedGeneration}`
+          );
+
+          console.log(`    ✓ All observedGenerations match after update: ${updatedStatusObservedGeneration}`);
+          console.log(`    ✓ Test validates condition metadata correctness across reconciliation cycles`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);

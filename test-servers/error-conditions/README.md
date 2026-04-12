@@ -167,6 +167,18 @@ Indicates overall server operational status.
    - Validates: Operator recovers from CrashLoopBackOff when env vars are fixed
    - Validates: Pod restarts work correctly after spec changes
 
+### Condition Metadata Consistency
+
+23. **Condition observedGeneration consistency** - Verify all conditions have matching observedGeneration
+   - Deploy MCPServer and wait for Ready=True, Available
+   - Verify: `status.observedGeneration` = `Accepted.observedGeneration` = `Ready.observedGeneration`
+   - Perform spec update (scale to 2 replicas)
+   - Wait for observedGeneration to advance
+   - Verify: All observedGenerations still match after update
+   - Validates: Condition metadata correctness across reconciliation cycles
+   - Validates: All conditions refer to the same generation
+   - Ensures: No bugs in condition update logic that could cause observedGeneration inconsistency
+
 ## Implementation Details
 
 ### Manifests
@@ -193,6 +205,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `20-lasttransitiontime-recovery.yaml`
 - `21-recovery-bad-image.yaml`
 - `22-recovery-crash-loop.yaml`
+- `23-observedgeneration-consistency.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -249,7 +262,7 @@ This is useful for:
 
 ## Expected Results
 
-All 22 test cases should pass, validating:
+All 23 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

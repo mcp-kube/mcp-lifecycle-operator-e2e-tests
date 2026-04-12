@@ -1,0 +1,17 @@
+---
+# Test Case: Condition observedGeneration consistency
+# Scenario: Verify all conditions have same observedGeneration as status.observedGeneration
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: observedgeneration-consistency
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+  runtime:
+    replicas: 1  # Will be updated during test to verify consistency after spec changes
