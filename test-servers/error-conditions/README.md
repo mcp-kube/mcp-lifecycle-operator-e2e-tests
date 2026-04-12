@@ -101,6 +101,16 @@ Indicates overall server operational status.
    - Validates: Reconciliation queue handles rapid updates without missing changes
    - Validates: observedGeneration tracking works correctly under stress
 
+17. **Update while deployment unavailable** - Apply spec updates while deployment is in error state
+   - Deploy MCPServer with bad image (causes ImagePullBackOff)
+   - Wait for `Accepted=True, Valid` and `Ready=False, DeploymentUnavailable`
+   - Update replicas while deployment is unavailable (generation → 2)
+   - Expected: observedGeneration advances to 2 (reconciliation continues)
+   - Expected: `Ready=False, DeploymentUnavailable` (stays unavailable)
+   - Expected: Deployment spec reflects new replica count
+   - Validates: Operator continues reconciling spec changes even when deployment is unavailable
+   - Validates: observedGeneration tracking works during error states
+
 ## Implementation Details
 
 ### Manifests
@@ -121,6 +131,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `14-optional-configmap-envfrom.yaml`
 - `15-optional-secret-envfrom.yaml`
 - `16-rapid-updates.yaml`
+- `17-update-while-unavailable.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -177,7 +188,7 @@ This is useful for:
 
 ## Expected Results
 
-All 16 test cases should pass, validating:
+All 17 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

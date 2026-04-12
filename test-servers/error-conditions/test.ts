@@ -838,6 +838,112 @@ data:
           await sleep(2000);
         }
       });
+
+      // Test 3.2: Update while Deployment unavailable
+      await test('Update while deployment unavailable: Reconciliation continues', async () => {
+        const serverName = 'update-while-unavailable';
+        const manifestPath = path.join(manifestsDir, '17-update-while-unavailable.yaml');
+
+        try {
+          console.log(`    Testing spec updates while deployment unavailable...`);
+          console.log(`    [1/7] Deploying with bad image (will cause ImagePullBackOff)...`);
+
+          // Deploy MCPServer with bad image
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Accepted=True, Valid
+          console.log(`    [2/7] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+
+          // Step 2: Wait for Ready=False, DeploymentUnavailable
+          console.log(`    [3/7] Waiting for Ready=False, DeploymentUnavailable...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'False', 'DeploymentUnavailable', namespace, 60);
+
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          console.log(`    Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
+          test.assertEqual(initialReadyCondition.status, 'False', 'Ready should be False');
+          test.assertEqual(initialReadyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
+
+          // Get initial generation and observedGeneration
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          const initialObservedGeneration = initialServer.status.observedGeneration;
+
+          console.log(`    Initial state: generation=${initialGeneration}, observedGeneration=${initialObservedGeneration}`);
+          test.assertEqual(initialGeneration, 1, 'Initial generation should be 1');
+          test.assertEqual(initialObservedGeneration, 1, 'Initial observedGeneration should be 1');
+
+          // Step 3: Update replicas while deployment is unavailable
+          console.log(`    [4/7] Updating replicas to 3 while deployment is unavailable...`);
+          const patchJson = {
+            spec: {
+              runtime: {
+                replicas: 3
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 4: Wait for observedGeneration to advance to 2
+          console.log(`    [5/7] Waiting for observedGeneration to advance to 2...`);
+
+          let currentObservedGeneration = initialObservedGeneration;
+          let pollCount = 0;
+          const maxPolls = 60; // 30 seconds with 500ms sleep
+
+          while (currentObservedGeneration < 2 && pollCount < maxPolls) {
+            await sleep(500);
+            currentObservedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
+            pollCount++;
+          }
+
+          test.assertEqual(currentObservedGeneration, 2, 'observedGeneration should advance to 2');
+          console.log(`    ✓ observedGeneration advanced to 2 (after ${pollCount * 0.5}s)`);
+
+          // Step 5: Verify Ready is still False, DeploymentUnavailable
+          console.log(`    [6/7] Verifying Ready condition remains False, DeploymentUnavailable...`);
+          const updatedReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+
+          test.assertEqual(updatedReadyCondition.status, 'False', 'Ready should still be False after update');
+          test.assertEqual(
+            updatedReadyCondition.reason,
+            'DeploymentUnavailable',
+            'Ready reason should still be DeploymentUnavailable'
+          );
+
+          console.log(
+            `    ✓ Ready: status=${updatedReadyCondition.status}, reason=${updatedReadyCondition.reason} (unchanged)`
+          );
+
+          // Step 6: Verify Deployment has updated replica count
+          console.log(`    [7/7] Verifying Deployment spec has updated replicas...`);
+          const deploymentJson = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const deployment = JSON.parse(deploymentJson.stdout);
+          const deploymentReplicas = deployment.spec.replicas;
+
+          test.assertEqual(deploymentReplicas, 3, 'Deployment replicas should be updated to 3');
+          console.log(`    ✓ Deployment replicas: ${deploymentReplicas} (updated correctly)`);
+
+          console.log(
+            `    ✓ Update while unavailable test successful: reconciliation continued despite unavailable deployment`
+          );
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);
