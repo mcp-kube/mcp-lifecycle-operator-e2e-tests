@@ -1,0 +1,30 @@
+---
+# Test Case: Recovery from crash loop (DeploymentUnavailable)
+# Scenario: Fix CrashLoopBackOff by updating environment variable
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: recovery-crash-loop
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: docker.io/library/busybox:latest
+  config:
+    port: 8080
+    env:
+      - name: REQUIRED_VALUE
+        value: "wrong"  # Will be updated to "correct" during test
+    # This command will check the env var and crash if it's wrong
+    arguments:
+      - /bin/sh
+      - -c
+      - |
+        if [ "$REQUIRED_VALUE" != "correct" ]; then
+          echo "ERROR: REQUIRED_VALUE must be 'correct', got: $REQUIRED_VALUE"
+          exit 1
+        fi
+        echo "Container started successfully with REQUIRED_VALUE=$REQUIRED_VALUE"
+        # Keep container running
+        while true; do sleep 3600; done

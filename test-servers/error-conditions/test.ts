@@ -1255,6 +1255,204 @@ EOF`);
           await sleep(2000);
         }
       });
+
+      // Test 5.1: Recovery from bad image (DeploymentUnavailable)
+      await test('Recovery: Fix bad image (DeploymentUnavailable → Available)', async () => {
+        const serverName = 'recovery-bad-image';
+        const manifestPath = path.join(manifestsDir, '21-recovery-bad-image.yaml');
+
+        try {
+          console.log(`    Testing recovery from bad image (ImagePullBackOff)...`);
+          console.log(`    [1/7] Deploying with bad image...`);
+
+          // Deploy MCPServer with bad image
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Accepted=True, Valid (config is valid, just bad image)
+          console.log(`    [2/7] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True (config is valid)');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+
+          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+
+          // Step 2: Wait for Ready=False, DeploymentUnavailable
+          console.log(`    [3/7] Waiting for Ready=False, DeploymentUnavailable...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'False', 'DeploymentUnavailable', namespace, 60);
+
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(initialReadyCondition.status, 'False', 'Ready should be False');
+          test.assertEqual(initialReadyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
+
+          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
+
+          // Get initial generation
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          // Step 3: Fix the image by updating to a valid one
+          console.log(`    [4/7] Fixing image (updating to valid image)...`);
+          const patchJson = {
+            spec: {
+              source: {
+                containerImage: {
+                  ref: 'quay.io/containers/kubernetes_mcp_server:latest'
+                }
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 4: Verify generation incremented
+          console.log(`    [5/7] Verifying generation incremented...`);
+          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const updatedServer = JSON.parse(updatedServerJson.stdout);
+          const updatedGeneration = updatedServer.metadata.generation;
+
+          test.assertEqual(updatedGeneration, initialGeneration + 1, 'Generation should increment');
+          console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
+
+          // Step 5: Wait for Ready=True, Available (recovery)
+          console.log(`    [6/7] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 90);
+
+          const recoveredReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(recoveredReadyCondition.status, 'True', 'Ready should be True after recovery');
+          test.assertEqual(recoveredReadyCondition.reason, 'Available', 'Ready reason should be Available');
+
+          console.log(`    Recovered Ready: status=${recoveredReadyCondition.status}, reason=${recoveredReadyCondition.reason}`);
+
+          // Step 6: Verify pods are running with new image
+          console.log(`    [7/7] Verifying pods are running with correct image...`);
+          const podsJson = await execAsync(
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o json`
+          );
+          const pods = JSON.parse(podsJson.stdout);
+
+          test.assert(pods.items.length > 0, 'At least one pod should exist');
+          const pod = pods.items[0];
+          const containerImage = pod.spec.containers[0].image;
+
+          test.assert(
+            containerImage.includes('kubernetes_mcp_server'),
+            `Pod should be running with correct image, got: ${containerImage}`
+          );
+
+          console.log(`    ✓ Pod running with correct image: ${containerImage}`);
+          console.log(`    ✓ Recovery successful: DeploymentUnavailable → Available`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // Test 5.2: Recovery from crash loop (fix via env var)
+      await test('Recovery: Fix crash loop via env var (DeploymentUnavailable → Available)', async () => {
+        const serverName = 'recovery-crash-loop';
+        const manifestPath = path.join(manifestsDir, '22-recovery-crash-loop.yaml');
+
+        try {
+          console.log(`    Testing recovery from crash loop by fixing env var...`);
+          console.log(`    [1/7] Deploying with bad env var (will cause crash loop)...`);
+
+          // Deploy MCPServer with bad env var
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Accepted=True, Valid (config is valid)
+          console.log(`    [2/7] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True (config is valid)');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+
+          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+
+          // Step 2: Wait for Ready=False, DeploymentUnavailable
+          console.log(`    [3/7] Waiting for Ready=False, DeploymentUnavailable...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'False', 'DeploymentUnavailable', namespace, 60);
+
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(initialReadyCondition.status, 'False', 'Ready should be False');
+          test.assertEqual(initialReadyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
+
+          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
+
+          // Get initial generation
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          // Step 3: Fix the env var
+          console.log(`    [4/7] Fixing env var (updating REQUIRED_VALUE to 'correct')...`);
+          const patchJson = {
+            spec: {
+              config: {
+                env: [
+                  {
+                    name: 'REQUIRED_VALUE',
+                    value: 'correct'
+                  }
+                ]
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 4: Verify generation incremented
+          console.log(`    [5/7] Verifying generation incremented...`);
+          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const updatedServer = JSON.parse(updatedServerJson.stdout);
+          const updatedGeneration = updatedServer.metadata.generation;
+
+          test.assertEqual(updatedGeneration, initialGeneration + 1, 'Generation should increment');
+          console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
+
+          // Step 5: Wait for Ready=True, Available (recovery)
+          console.log(`    [6/7] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 90);
+
+          const recoveredReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(recoveredReadyCondition.status, 'True', 'Ready should be True after recovery');
+          test.assertEqual(recoveredReadyCondition.reason, 'Available', 'Ready reason should be Available');
+
+          console.log(`    Recovered Ready: status=${recoveredReadyCondition.status}, reason=${recoveredReadyCondition.reason}`);
+
+          // Step 6: Verify pods are running
+          console.log(`    [7/7] Verifying pods are running successfully...`);
+          const podsJson = await execAsync(
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o json`
+          );
+          const pods = JSON.parse(podsJson.stdout);
+
+          test.assert(pods.items.length > 0, 'At least one pod should exist');
+          const pod = pods.items[0];
+          const podStatus = pod.status.phase;
+
+          test.assertEqual(podStatus, 'Running', `Pod should be Running, got: ${podStatus}`);
+
+          console.log(`    ✓ Pod is running: ${pod.metadata.name}`);
+          console.log(`    ✓ Recovery successful: CrashLoopBackOff → Available`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);

@@ -1,0 +1,15 @@
+---
+# Test Case: Recovery from bad image (DeploymentUnavailable)
+# Scenario: Fix ImagePullBackOff by updating to valid image
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: recovery-bad-image
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: this-image-does-not-exist:latest  # Will be updated to valid image during test
+  config:
+    port: 8080
