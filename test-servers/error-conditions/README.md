@@ -90,6 +90,17 @@ Indicates overall server operational status.
 
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
+### Stress Testing (Reconciliation Queue)
+
+16. **Rapid successive updates** - Apply multiple spec updates rapidly and verify reconciliation handles them correctly
+   - Deploy MCPServer with replicas=1
+   - Apply 4 rapid updates: replicas=2, replicas=3, add env var, replicas=1
+   - Expected: observedGeneration eventually reaches final generation (5)
+   - Expected: Final state reflects all updates (replicas=1, env var present)
+   - Expected: `Ready=True, Available` maintained throughout (or brief transitions)
+   - Validates: Reconciliation queue handles rapid updates without missing changes
+   - Validates: observedGeneration tracking works correctly under stress
+
 ## Implementation Details
 
 ### Manifests
@@ -109,6 +120,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `13-optional-secret-storage.yaml`
 - `14-optional-configmap-envfrom.yaml`
 - `15-optional-secret-envfrom.yaml`
+- `16-rapid-updates.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -165,7 +177,7 @@ This is useful for:
 
 ## Expected Results
 
-All 15 test cases should pass, validating:
+All 16 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

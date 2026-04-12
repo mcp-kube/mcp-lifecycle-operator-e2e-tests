@@ -1,0 +1,17 @@
+---
+# Test Case: Rapid successive updates - stress test reconciliation queue
+# Scenario: Apply multiple rapid spec updates and verify observedGeneration catches up
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: rapid-updates
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+  runtime:
+    replicas: 1  # Will be updated rapidly during test

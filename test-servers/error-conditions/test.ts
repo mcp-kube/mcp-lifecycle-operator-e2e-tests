@@ -709,6 +709,135 @@ data:
           await sleep(2000);
         }
       });
+
+      // Test 3.1: Rapid successive updates - stress test reconciliation queue
+      await test('Rapid successive updates: Reconciliation queue handling', async () => {
+        const serverName = 'rapid-updates';
+        const manifestPath = path.join(manifestsDir, '16-rapid-updates.yaml');
+        try {
+          console.log(`    Testing rapid successive spec updates...`);
+          console.log(`    [1/6] Deploying initial configuration (replicas=1)...`);
+
+          // Deploy initial MCPServer
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for initial Ready state
+          console.log(`    [2/6] Waiting for initial Ready state...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Get initial generation and observedGeneration
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          const initialObservedGeneration = initialServer.status.observedGeneration;
+
+          console.log(`    Initial state: generation=${initialGeneration}, observedGeneration=${initialObservedGeneration}`);
+          test.assertEqual(initialGeneration, initialObservedGeneration, 'Initial observedGeneration should match generation');
+
+          // Step 2: Apply 4 rapid updates
+          console.log(`    [3/6] Applying 4 rapid spec updates...`);
+
+          const timestamp = new Date().getTime();
+
+          // Update 1: replicas=2
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify({
+              spec: { runtime: { replicas: 2 } }
+            })}'`
+          );
+
+          // Update 2: replicas=3
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify({
+              spec: { runtime: { replicas: 3 } }
+            })}'`
+          );
+
+          // Update 3: Add env var
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify({
+              spec: {
+                config: {
+                  env: [{ name: 'RAPID_UPDATE_TEST', value: timestamp.toString() }]
+                }
+              }
+            })}'`
+          );
+
+          // Update 4: replicas=1
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify({
+              spec: { runtime: { replicas: 1 } }
+            })}'`
+          );
+
+          console.log(`    ✓ Applied 4 rapid updates`);
+
+          // Step 3: Wait for observedGeneration to catch up
+          console.log(`    [4/6] Waiting for observedGeneration to catch up...`);
+
+          const targetGeneration = initialGeneration + 4;
+          let currentObservedGeneration = initialObservedGeneration;
+          let pollCount = 0;
+          const maxPolls = 60; // 30 seconds with 500ms sleep
+
+          while (currentObservedGeneration < targetGeneration && pollCount < maxPolls) {
+            await sleep(500);
+            currentObservedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
+            pollCount++;
+          }
+
+          test.assert(
+            currentObservedGeneration === targetGeneration,
+            `observedGeneration should eventually reach ${targetGeneration} (got ${currentObservedGeneration})`
+          );
+
+          console.log(`    ✓ observedGeneration caught up to generation ${targetGeneration} (after ${pollCount * 0.5}s)`);
+
+          // Step 4: Verify final state
+          console.log(`    [5/6] Verifying final state...`);
+
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+
+          // Verify replicas=1 (last replica update)
+          test.assertEqual(
+            finalServer.spec.runtime.replicas,
+            1,
+            'Final replicas should be 1 (last update)'
+          );
+
+          // Verify env var is present (from update 3)
+          const envVars = finalServer.spec.config.env || [];
+          const rapidUpdateEnv = envVars.find((e: any) => e.name === 'RAPID_UPDATE_TEST');
+          test.assert(rapidUpdateEnv !== undefined, 'RAPID_UPDATE_TEST env var should be present');
+          test.assertEqual(
+            rapidUpdateEnv.value,
+            timestamp.toString(),
+            'RAPID_UPDATE_TEST env var should have correct value'
+          );
+
+          console.log(`    ✓ Final state correct: replicas=1, env var present`);
+
+          // Step 5: Verify Ready condition
+          console.log(`    [6/6] Verifying Ready condition...`);
+
+          const readyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(readyCondition.status, 'True', 'Ready should be True after updates');
+          test.assertEqual(readyCondition.reason, 'Available', 'Ready reason should be Available');
+
+          console.log(
+            `    ✓ Ready: status=${readyCondition.status}, reason=${readyCondition.reason}, message="${readyCondition.message}"`
+          );
+
+          console.log(`    ✓ Rapid updates test successful: all 4 updates applied, no missed updates`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);
