@@ -1584,6 +1584,83 @@ EOF`);
           await sleep(2000);
         }
       });
+
+      // Test 7.1: Capture Initializing state (best effort)
+      await test('Initializing state capture: Observe Ready=Unknown, Initializing (best effort)', async () => {
+        const serverName = 'initializing-state-capture';
+        const manifestPath = path.join(manifestsDir, '24-initializing-state-capture.yaml');
+
+        try {
+          console.log(`    Testing Initializing state capture (best effort)...`);
+          console.log(`    [1/3] Deploying MCPServer and polling rapidly to capture Initializing state...`);
+
+          // Track whether we observed Initializing
+          let initializingObserved = false;
+          let initializingCondition: any = null;
+
+          // Start rapid polling in background (100ms intervals)
+          const pollingPromise = (async () => {
+            const maxPolls = 100; // Poll for up to 10 seconds (100 * 100ms)
+            for (let i = 0; i < maxPolls; i++) {
+              try {
+                const serverJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json 2>/dev/null`);
+                const server = JSON.parse(serverJson.stdout);
+
+                if (server.status?.conditions) {
+                  const readyCondition = server.status.conditions.find((c: any) => c.type === 'Ready');
+
+                  if (readyCondition?.status === 'Unknown' && readyCondition?.reason === 'Initializing') {
+                    initializingObserved = true;
+                    initializingCondition = readyCondition;
+                    console.log(`    ⚡ Captured Initializing state after ${i * 100}ms!`);
+                    console.log(`       Ready: status=Unknown, reason=Initializing`);
+                    console.log(`       message: ${readyCondition.message}`);
+                    break;
+                  }
+                }
+              } catch (e) {
+                // MCPServer might not exist yet, continue polling
+              }
+
+              await sleep(100);
+            }
+          })();
+
+          // Deploy MCPServer
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Wait for polling to finish
+          await pollingPromise;
+
+          // Step 2: Wait for final Ready state
+          console.log(`    [2/3] Waiting for final Ready=True, Available state...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          const finalReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          console.log(`    Final Ready: status=${finalReadyCondition.status}, reason=${finalReadyCondition.reason}`);
+
+          // Step 3: Report results
+          console.log(`    [3/3] Test results...`);
+
+          if (initializingObserved) {
+            console.log(`    ✓ Initializing state was captured!`);
+            console.log(`    ✓ Validates operator sets Ready=Unknown, Initializing during initial deployment`);
+            console.log(`    ✓ Transition: Initializing → Available`);
+          } else {
+            console.log(`    ⚠️  Initializing state was NOT captured (too fast/timing dependent)`);
+            console.log(`    ℹ️  This is expected - Initializing is a transient state`);
+            console.log(`    ℹ️  Test passes regardless - best effort observation only`);
+          }
+
+          // Test always passes - this is best-effort
+          console.log(`    ✓ Test complete: Documents Initializing state behavior (observed: ${initializingObserved})`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);

@@ -179,6 +179,18 @@ Indicates overall server operational status.
    - Validates: All conditions refer to the same generation
    - Ensures: No bugs in condition update logic that could cause observedGeneration inconsistency
 
+### Transient State Observation (Best Effort)
+
+24. **Initializing state capture** - Try to observe Ready=Unknown, Initializing during deployment (best effort)
+   - Deploy MCPServer and poll status every 100ms (rapid polling)
+   - Try to capture: `Ready=Unknown, reason=Initializing` (transient state)
+   - Expected: May or may not observe Initializing (timing dependent)
+   - Eventually: `Ready=True, Available` (final state)
+   - Test always passes: This is best-effort observation only
+   - Validates: Operator sets Initializing when appropriate (if captured)
+   - Documents: Transient state behavior for debugging timing issues
+   - Note: Initializing is very fast and difficult to capture reliably
+
 ## Implementation Details
 
 ### Manifests
@@ -206,6 +218,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `21-recovery-bad-image.yaml`
 - `22-recovery-crash-loop.yaml`
 - `23-observedgeneration-consistency.yaml`
+- `24-initializing-state-capture.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -262,7 +275,7 @@ This is useful for:
 
 ## Expected Results
 
-All 23 test cases should pass, validating:
+All 24 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked
