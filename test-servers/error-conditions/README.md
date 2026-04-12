@@ -62,6 +62,14 @@ Indicates overall server operational status.
    - Verify: `Accepted=True, Valid` → `Ready=True, Available`
    - Validates: lastTransitionTime updates, observedGeneration advances, Deployment and Pods successfully start
 
+### Optional Resources (optional: true flag)
+
+12. **Optional ConfigMap in storage** - Deploy with missing but optional ConfigMap
+   - ConfigMap does not exist but has `optional: true` flag
+   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
+   - Expected: `Ready=True, Available` (pods start successfully)
+   - Validates: Operator respects optional flag in storage mounts
+
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
 ## Implementation Details
@@ -79,6 +87,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `09-empty-secret-name-storage.yaml`
 - `10-recovery-missing-configmap.yaml`
 - `11-recovery-missing-secret.yaml`
+- `12-optional-configmap-storage.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -135,7 +144,7 @@ This is useful for:
 
 ## Expected Results
 
-All 11 test cases should pass, validating:
+All 12 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

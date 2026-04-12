@@ -143,6 +143,17 @@ const testCases: TestCase[] = [
     description: 'Secret name in storage is empty',
     stabilizationTime: 5,
   },
+  {
+    name: 'Optional ConfigMap in storage',
+    manifestFile: '12-optional-configmap-storage.yaml',
+    serverName: 'optional-configmap-storage',
+    expectedAcceptedStatus: 'True',
+    expectedAcceptedReason: 'Valid',
+    expectedReadyStatus: 'True',
+    expectedReadyReason: 'Available',
+    description: 'Missing optional ConfigMap should not fail validation',
+    stabilizationTime: 60,
+  },
   // Note: ServiceUnavailable reason is tested in operator unit tests
   // (internal/controller/mcpserver_controller_test.go - Service Reconciliation Failures)
   // E2E testing of Service reconciliation failures requires API client interceptors,
@@ -342,9 +353,9 @@ async function main() {
           tc.name.includes('ImagePull') || tc.name.includes('CrashLoop')
         );
 
-        // Group 3: Scaling tests
+        // Group 3: Scaling and optional resource tests
         const scalingTests = testCases.filter(tc =>
-          tc.name.includes('ScaledToZero')
+          tc.name.includes('ScaledToZero') || tc.name.includes('Optional')
         );
 
         // Run groups in parallel
