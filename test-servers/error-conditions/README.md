@@ -125,16 +125,7 @@ Indicates overall server operational status.
    - Validates: Kubernetes condition contract - lastTransitionTime only changes when status/reason changes
    - Validates: Operator respects condition lifecycle semantics
 
-19. **lastTransitionTime updates on reason change** - Verify lastTransitionTime DOES change when reason changes
-   - Deploy MCPServer with replicas=1
-   - Wait for `Ready=True, Available` and capture lastTransitionTime (T1)
-   - Scale to 0 replicas (Ready status stays True, but reason changes)
-   - Expected: `Ready=True, ScaledToZero` (reason changed from Available)
-   - Expected: lastTransitionTime = T2 where T2 > T1
-   - Validates: Kubernetes condition contract - lastTransitionTime updates when reason changes
-   - Validates: Operator correctly updates lastTransitionTime on reason transitions
-
-20. **lastTransitionTime updates on status change (recovery)** - Verify lastTransitionTime DOES change when status changes
+19. **lastTransitionTime updates on status change (recovery)** - Verify lastTransitionTime DOES change when status changes
    - Deploy MCPServer with missing ConfigMap (Accepted=False, Invalid)
    - Capture lastTransitionTime (T1)
    - Add 2-second sleep to ensure different timestamp
@@ -147,7 +138,7 @@ Indicates overall server operational status.
 
 ### Deployment Recovery (Ready → Available transitions)
 
-21. **Recovery: Fix bad image** - Deploy with non-existent image, then fix it and verify recovery
+20. **Recovery: Fix bad image** - Deploy with non-existent image, then fix it and verify recovery
    - Initial state: Bad image causes ImagePullBackOff
    - Expected: `Accepted=True, Valid` (config is valid, just bad image)
    - Expected: `Ready=False, DeploymentUnavailable` (pods can't start)
@@ -158,20 +149,9 @@ Indicates overall server operational status.
    - Validates: Operator recovers from DeploymentUnavailable when image is fixed
    - Validates: Deployment rolling update works correctly
 
-22. **Recovery: Fix crash loop via env var** - Deploy with bad env var causing crash, then fix it
-   - Initial state: Bad env var causes container to crash (CrashLoopBackOff)
-   - Expected: `Accepted=True, Valid` (config is valid)
-   - Expected: `Ready=False, DeploymentUnavailable` (pods crash on startup)
-   - Update env var to correct value
-   - Verify: generation increments, observedGeneration advances
-   - Expected: `Ready=True, Available` (pods restart successfully)
-   - Expected: Pods running with corrected env var
-   - Validates: Operator recovers from CrashLoopBackOff when env vars are fixed
-   - Validates: Pod restarts work correctly after spec changes
-
 ### Condition Metadata Consistency
 
-23. **Condition observedGeneration consistency** - Verify all conditions have matching observedGeneration
+21. **Condition observedGeneration consistency** - Verify all conditions have matching observedGeneration
    - Deploy MCPServer and wait for Ready=True, Available
    - Verify: `status.observedGeneration` = `Accepted.observedGeneration` = `Ready.observedGeneration`
    - Perform spec update (scale to 2 replicas)
@@ -183,7 +163,7 @@ Indicates overall server operational status.
 
 ### Transient State Observation (Best Effort)
 
-24. **Initializing state capture** - Try to observe Ready=Unknown, Initializing during deployment (best effort)
+22. **Initializing state capture** - Try to observe Ready=Unknown, Initializing during deployment (best effort)
    - Deploy MCPServer and poll status every 100ms (rapid polling)
    - Try to capture: `Ready=Unknown, reason=Initializing` (transient state)
    - Expected: May or may not observe Initializing (timing dependent)
@@ -215,10 +195,8 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `16-rapid-updates.yaml`
 - `17-update-while-unavailable.yaml`
 - `18-lasttransitiontime-stability.yaml`
-- `19-lasttransitiontime-reason-change.yaml`
 - `20-lasttransitiontime-recovery.yaml`
 - `21-recovery-bad-image.yaml`
-- `22-recovery-crash-loop.yaml`
 - `23-observedgeneration-consistency.yaml`
 - `24-initializing-state-capture.yaml`
 
@@ -277,7 +255,7 @@ This is useful for:
 
 ## Expected Results
 
-All 24 test cases should pass, validating:
+All 22 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

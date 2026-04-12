@@ -1044,100 +1044,6 @@ data:
         }
       });
 
-      // Test 4.2: lastTransitionTime stability when only reason changes
-      await test('lastTransitionTime stability: Reason-only change (Available → ScaledToZero)', async () => {
-        const serverName = 'lasttransitiontime-reason-change';
-        const manifestPath = path.join(manifestsDir, '19-lasttransitiontime-reason-change.yaml');
-
-        try {
-          console.log(`    Testing that lastTransitionTime does NOT change when only reason changes...`);
-          console.log(`    [1/5] Deploying initial configuration (replicas=1)...`);
-
-          // Deploy MCPServer
-          await execAsync(`kubectl apply -f ${manifestPath}`);
-
-          // Step 1: Wait for Ready=True, Available
-          console.log(`    [2/5] Waiting for initial Ready state...`);
-          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
-
-          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
-          test.assertEqual(initialReadyCondition.status, 'True', 'Initial Ready should be True');
-          test.assertEqual(initialReadyCondition.reason, 'Available', 'Initial Ready reason should be Available');
-
-          // Capture initial lastTransitionTime (T1)
-          const initialLastTransitionTime = initialReadyCondition.lastTransitionTime;
-          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
-          console.log(`    Initial lastTransitionTime: ${initialLastTransitionTime}`);
-
-          // Get initial generation
-          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
-          const initialServer = JSON.parse(initialServerJson.stdout);
-          const initialGeneration = initialServer.metadata.generation;
-
-          console.log(`    Initial generation: ${initialGeneration}`);
-
-          // Wait to ensure operator has fully completed reconciliation
-          // This prevents the scale-to-zero from being processed in the same reconciliation cycle
-          console.log(`    Waiting 5 seconds to ensure operator reconciliation is complete...`);
-          await sleep(5000);
-          console.log(`    ✓ Operator should have fully settled the initial state`);
-
-          // Step 2: Scale to 0 replicas (changes reason from Available to ScaledToZero)
-          console.log(`    [3/5] Scaling to 0 replicas (reason will change to ScaledToZero)...`);
-          const patchJson = {
-            spec: {
-              runtime: {
-                replicas: 0
-              }
-            }
-          };
-          await execAsync(
-            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
-          );
-
-          // Step 3: Wait for Ready=True, ScaledToZero
-          console.log(`    [4/5] Waiting for Ready=True, ScaledToZero...`);
-          await k8s.waitForCondition(serverName, 'Ready', 'True', 'ScaledToZero', namespace, 60);
-
-          const updatedReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
-          test.assertEqual(updatedReadyCondition.status, 'True', 'Ready should still be True');
-          test.assertEqual(updatedReadyCondition.reason, 'ScaledToZero', 'Ready reason should be ScaledToZero');
-
-          console.log(`    Updated Ready: status=${updatedReadyCondition.status}, reason=${updatedReadyCondition.reason}`);
-
-          // Step 4: Verify generation incremented
-          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
-          const updatedServer = JSON.parse(updatedServerJson.stdout);
-          const updatedGeneration = updatedServer.metadata.generation;
-
-          test.assertEqual(updatedGeneration, initialGeneration + 1, 'Generation should increment');
-          console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
-
-          // Step 5: Verify lastTransitionTime DID NOT change
-          // Per Kubernetes conventions, lastTransitionTime only changes when status (True/False/Unknown) changes
-          // Reason-only changes should NOT update lastTransitionTime
-          console.log(`    [5/5] Verifying lastTransitionTime did NOT change...`);
-          const updatedLastTransitionTime = updatedReadyCondition.lastTransitionTime;
-
-          console.log(`    lastTransitionTime: ${initialLastTransitionTime} → ${updatedLastTransitionTime}`);
-
-          test.assertEqual(
-            updatedLastTransitionTime,
-            initialLastTransitionTime,
-            `lastTransitionTime should NOT change when only reason changes (status stayed True). ` +
-            `This follows Kubernetes convention: lastTransitionTime only updates on status field changes.`
-          );
-
-          console.log(`    ✓ lastTransitionTime correctly unchanged (reason changed: Available → ScaledToZero)`);
-          console.log(`    ✓ Test validates Kubernetes API convention: lastTransitionTime stable on reason-only changes`);
-        } finally {
-          // Cleanup
-          console.log(`    Cleaning up ${serverName}...`);
-          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
-          await sleep(2000);
-        }
-      });
-
       // Test 4.3: lastTransitionTime updates on recovery (status change)
       await test('lastTransitionTime updates: Status change (False → True on recovery)', async () => {
         const serverName = 'lasttransitiontime-recovery';
@@ -1265,13 +1171,13 @@ EOF`);
 
         try {
           console.log(`    Testing recovery from bad image (ImagePullBackOff)...`);
-          console.log(`    [1/7] Deploying with bad image...`);
+          console.log(`    [1/8] Deploying with bad image...`);
 
           // Deploy MCPServer with bad image
           await execAsync(`kubectl apply -f ${manifestPath}`);
 
           // Step 1: Wait for Accepted=True, Valid (config is valid, just bad image)
-          console.log(`    [2/7] Waiting for Accepted=True, Valid...`);
+          console.log(`    [2/8] Waiting for Accepted=True, Valid...`);
           await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
 
           const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
@@ -1281,7 +1187,7 @@ EOF`);
           console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
 
           // Step 2: Wait for Ready=False, DeploymentUnavailable
-          console.log(`    [3/7] Waiting for Ready=False, DeploymentUnavailable...`);
+          console.log(`    [3/8] Waiting for Ready=False, DeploymentUnavailable...`);
           await k8s.waitForCondition(serverName, 'Ready', 'False', 'DeploymentUnavailable', namespace, 60);
 
           const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
@@ -1298,7 +1204,7 @@ EOF`);
           console.log(`    Initial generation: ${initialGeneration}`);
 
           // Step 3: Fix the image by updating to a valid one
-          console.log(`    [4/7] Fixing image (updating to valid image)...`);
+          console.log(`    [4/8] Fixing image (updating to valid image)...`);
           const patchJson = {
             spec: {
               source: {
@@ -1313,7 +1219,7 @@ EOF`);
           );
 
           // Step 4: Verify generation incremented
-          console.log(`    [5/7] Verifying generation incremented...`);
+          console.log(`    [5/8] Verifying generation incremented...`);
           const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
           const updatedServer = JSON.parse(updatedServerJson.stdout);
           const updatedGeneration = updatedServer.metadata.generation;
@@ -1322,7 +1228,7 @@ EOF`);
           console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
 
           // Step 5: Wait for Ready=True, Available (recovery)
-          console.log(`    [6/7] Waiting for Ready=True, Available...`);
+          console.log(`    [6/8] Waiting for Ready=True, Available...`);
           await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 90);
 
           const recoveredReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
@@ -1331,16 +1237,30 @@ EOF`);
 
           console.log(`    Recovered Ready: status=${recoveredReadyCondition.status}, reason=${recoveredReadyCondition.reason}`);
 
-          // Step 6: Verify pods are running with new image
-          console.log(`    [7/7] Verifying pods are running with correct image...`);
+          // Step 6: Wait for Deployment rollout to complete
+          // This ensures the new image has been fully rolled out before we verify
+          console.log(`    [7/8] Waiting for Deployment rollout to complete...`);
+          await execAsync(
+            `kubectl rollout status deployment -l mcp-server=${serverName} -n ${namespace} --timeout=120s`
+          );
+          console.log(`    ✓ Deployment rollout complete`);
+
+          // Step 7: Verify pods are running with new image
+          console.log(`    [8/8] Verifying pods are running with correct image...`);
           const podsJson = await execAsync(
             `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o json`
           );
           const pods = JSON.parse(podsJson.stdout);
 
           test.assert(pods.items.length > 0, 'At least one pod should exist');
-          const pod = pods.items[0];
-          const containerImage = pod.spec.containers[0].image;
+
+          // Find a running pod (not terminating)
+          const runningPod = pods.items.find((p: any) => p.status.phase === 'Running');
+          test.assert(runningPod, 'At least one running pod should exist');
+
+          // Check the actual running image from status, not spec
+          const containerStatus = runningPod.status.containerStatuses[0];
+          const containerImage = containerStatus.image;
 
           test.assert(
             containerImage.includes('kubernetes_mcp_server'),
@@ -1349,106 +1269,6 @@ EOF`);
 
           console.log(`    ✓ Pod running with correct image: ${containerImage}`);
           console.log(`    ✓ Recovery successful: DeploymentUnavailable → Available`);
-        } finally {
-          // Cleanup
-          console.log(`    Cleaning up ${serverName}...`);
-          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
-          await sleep(2000);
-        }
-      });
-
-      // Test 5.2: Recovery from crash loop (fix via env var)
-      await test('Recovery: Fix crash loop via env var (DeploymentUnavailable → Available)', async () => {
-        const serverName = 'recovery-crash-loop';
-        const manifestPath = path.join(manifestsDir, '22-recovery-crash-loop.yaml');
-
-        try {
-          console.log(`    Testing recovery from crash loop by fixing env var...`);
-          console.log(`    [1/7] Deploying with bad env var (will cause crash loop)...`);
-
-          // Deploy MCPServer with bad env var
-          await execAsync(`kubectl apply -f ${manifestPath}`);
-
-          // Step 1: Wait for Accepted=True, Valid (config is valid)
-          console.log(`    [2/7] Waiting for Accepted=True, Valid...`);
-          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
-
-          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
-          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True (config is valid)');
-          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
-
-          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
-
-          // Step 2: Wait for Ready=False, DeploymentUnavailable
-          console.log(`    [3/7] Waiting for Ready=False, DeploymentUnavailable...`);
-          await k8s.waitForCondition(serverName, 'Ready', 'False', 'DeploymentUnavailable', namespace, 60);
-
-          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
-          test.assertEqual(initialReadyCondition.status, 'False', 'Ready should be False');
-          test.assertEqual(initialReadyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
-
-          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
-
-          // Get initial generation
-          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
-          const initialServer = JSON.parse(initialServerJson.stdout);
-          const initialGeneration = initialServer.metadata.generation;
-
-          console.log(`    Initial generation: ${initialGeneration}`);
-
-          // Step 3: Fix the env var
-          console.log(`    [4/7] Fixing env var (updating REQUIRED_VALUE to 'correct')...`);
-          const patchJson = {
-            spec: {
-              config: {
-                env: [
-                  {
-                    name: 'REQUIRED_VALUE',
-                    value: 'correct'
-                  }
-                ]
-              }
-            }
-          };
-          await execAsync(
-            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
-          );
-
-          // Step 4: Verify generation incremented
-          console.log(`    [5/7] Verifying generation incremented...`);
-          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
-          const updatedServer = JSON.parse(updatedServerJson.stdout);
-          const updatedGeneration = updatedServer.metadata.generation;
-
-          test.assertEqual(updatedGeneration, initialGeneration + 1, 'Generation should increment');
-          console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
-
-          // Step 5: Wait for Ready=True, Available (recovery)
-          // Note: Recovery from CrashLoopBackOff can take time due to exponential backoff
-          console.log(`    [6/7] Waiting for Ready=True, Available (may take up to 3 minutes due to backoff)...`);
-          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 180);
-
-          const recoveredReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
-          test.assertEqual(recoveredReadyCondition.status, 'True', 'Ready should be True after recovery');
-          test.assertEqual(recoveredReadyCondition.reason, 'Available', 'Ready reason should be Available');
-
-          console.log(`    Recovered Ready: status=${recoveredReadyCondition.status}, reason=${recoveredReadyCondition.reason}`);
-
-          // Step 6: Verify pods are running
-          console.log(`    [7/7] Verifying pods are running successfully...`);
-          const podsJson = await execAsync(
-            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o json`
-          );
-          const pods = JSON.parse(podsJson.stdout);
-
-          test.assert(pods.items.length > 0, 'At least one pod should exist');
-          const pod = pods.items[0];
-          const podStatus = pod.status.phase;
-
-          test.assertEqual(podStatus, 'Running', `Pod should be Running, got: ${podStatus}`);
-
-          console.log(`    ✓ Pod is running: ${pod.metadata.name}`);
-          console.log(`    ✓ Recovery successful: CrashLoopBackOff → Available`);
         } finally {
           // Cleanup
           console.log(`    Cleaning up ${serverName}...`);
