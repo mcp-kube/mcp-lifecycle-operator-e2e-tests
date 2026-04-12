@@ -1,0 +1,21 @@
+---
+# Test Case: lastTransitionTime updates on recovery (status change)
+# Scenario: Fix configuration error - Accepted changes from False to True
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: lasttransitiontime-recovery
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /test-storage
+        source:
+          type: ConfigMap
+          configMap:
+            name: recovery-lastransitiontime-configmap  # Does not exist initially, will be created during test

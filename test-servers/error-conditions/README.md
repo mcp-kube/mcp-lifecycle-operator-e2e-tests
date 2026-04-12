@@ -132,6 +132,17 @@ Indicates overall server operational status.
    - Validates: Kubernetes condition contract - lastTransitionTime updates when reason changes
    - Validates: Operator correctly updates lastTransitionTime on reason transitions
 
+20. **lastTransitionTime updates on status change (recovery)** - Verify lastTransitionTime DOES change when status changes
+   - Deploy MCPServer with missing ConfigMap (Accepted=False, Invalid)
+   - Capture lastTransitionTime (T1)
+   - Add 2-second sleep to ensure different timestamp
+   - Create the missing ConfigMap to fix the error
+   - Expected: `Accepted=True, Valid` (status changed from False to True)
+   - Expected: lastTransitionTime = T2 where T2 > T1
+   - Expected: `Ready=True, Available` eventually
+   - Validates: Kubernetes condition contract - lastTransitionTime updates when status changes
+   - Validates: Operator correctly updates lastTransitionTime during recovery
+
 ## Implementation Details
 
 ### Manifests
@@ -155,6 +166,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `17-update-while-unavailable.yaml`
 - `18-lasttransitiontime-stability.yaml`
 - `19-lasttransitiontime-reason-change.yaml`
+- `20-lasttransitiontime-recovery.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -211,7 +223,7 @@ This is useful for:
 
 ## Expected Results
 
-All 19 test cases should pass, validating:
+All 20 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked
