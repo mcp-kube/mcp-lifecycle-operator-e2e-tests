@@ -70,6 +70,24 @@ Indicates overall server operational status.
    - Expected: `Ready=True, Available` (pods start successfully)
    - Validates: Operator respects optional flag in storage mounts
 
+13. **Optional Secret in storage** - Deploy with missing but optional Secret
+   - Secret does not exist but has `optional: true` flag
+   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
+   - Expected: `Ready=True, Available` (pods start successfully)
+   - Validates: Operator respects optional flag in storage mounts
+
+14. **Optional ConfigMap in envFrom** - Deploy with missing but optional ConfigMap in envFrom
+   - ConfigMap does not exist but has `optional: true` flag
+   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
+   - Expected: `Ready=True, Available` (environment variables not set, no error)
+   - Validates: Operator respects optional flag in envFrom
+
+15. **Optional Secret in envFrom** - Deploy with missing but optional Secret in envFrom
+   - Secret does not exist but has `optional: true` flag
+   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
+   - Expected: `Ready=True, Available` (environment variables not set, no error)
+   - Validates: Operator respects optional flag in envFrom
+
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
 ## Implementation Details
@@ -88,6 +106,9 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `10-recovery-missing-configmap.yaml`
 - `11-recovery-missing-secret.yaml`
 - `12-optional-configmap-storage.yaml`
+- `13-optional-secret-storage.yaml`
+- `14-optional-configmap-envfrom.yaml`
+- `15-optional-secret-envfrom.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -144,7 +165,7 @@ This is useful for:
 
 ## Expected Results
 
-All 12 test cases should pass, validating:
+All 15 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

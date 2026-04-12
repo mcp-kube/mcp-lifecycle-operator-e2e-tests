@@ -1,0 +1,19 @@
+---
+# Test Case: Accepted=True, Valid (optional ConfigMap in envFrom missing)
+# Scenario: Deploy with missing but optional ConfigMap in envFrom - should succeed
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: optional-configmap-envfrom
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    envFrom:
+      - configMapRef:
+          name: optional-configmap-envfrom-that-does-not-exist
+          optional: true  # KEY: Missing but optional - should NOT fail validation
