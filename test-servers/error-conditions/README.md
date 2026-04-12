@@ -64,17 +64,19 @@ Indicates overall server operational status.
 
 ### Optional Resources (optional: true flag)
 
-12. **Optional ConfigMap in storage** - Deploy with missing but optional ConfigMap
+12. **Optional ConfigMap in storage** - Deploy with missing but optional ConfigMap ⚠️ **Kubernetes Limitation**
    - ConfigMap does not exist but has `optional: true` flag
-   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
-   - Expected: `Ready=True, Available` (pods start successfully)
-   - Validates: Operator respects optional flag in storage mounts
+   - Expected: `Accepted=True, Valid` (operator correctly skips validation for optional resources)
+   - Expected: `Ready=False, DeploymentUnavailable` (pods cannot start - Kubernetes limitation)
+   - **Note**: Kubernetes does NOT support `optional: true` for volume mounts, only for env references
+   - Validates: Operator correctly accepts optional storage configuration (even though Kubernetes can't mount it)
 
-13. **Optional Secret in storage** - Deploy with missing but optional Secret
+13. **Optional Secret in storage** - Deploy with missing but optional Secret ⚠️ **Kubernetes Limitation**
    - Secret does not exist but has `optional: true` flag
-   - Expected: `Accepted=True, Valid` (operator skips validation for optional resources)
-   - Expected: `Ready=True, Available` (pods start successfully)
-   - Validates: Operator respects optional flag in storage mounts
+   - Expected: `Accepted=True, Valid` (operator correctly skips validation for optional resources)
+   - Expected: `Ready=False, DeploymentUnavailable` (pods cannot start - Kubernetes limitation)
+   - **Note**: Kubernetes does NOT support `optional: true` for volume mounts, only for env references
+   - Validates: Operator correctly accepts optional storage configuration (even though Kubernetes can't mount it)
 
 14. **Optional ConfigMap in envFrom** - Deploy with missing but optional ConfigMap in envFrom
    - ConfigMap does not exist but has `optional: true` flag

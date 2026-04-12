@@ -10,6 +10,6 @@ spec:
   source:
     type: ContainerImage
     containerImage:
-      ref: this-image-does-not-exist:latest  # Will be updated to valid image during test
+      ref: docker.io/nonexistent/invalid-image:latest  # Will be updated to valid image during test
   config:
     port: 8080

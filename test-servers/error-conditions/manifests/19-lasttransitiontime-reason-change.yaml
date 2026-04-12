@@ -1,6 +1,7 @@
 ---
-# Test Case: lastTransitionTime updates on reason change
+# Test Case: lastTransitionTime stability when only reason changes
 # Scenario: Scale to 0 replicas - Ready stays True but reason changes Available → ScaledToZero
+# Expected: lastTransitionTime should NOT change (per Kubernetes conventions)
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
 metadata:
