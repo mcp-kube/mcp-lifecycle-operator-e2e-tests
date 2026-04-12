@@ -56,6 +56,12 @@ Indicates overall server operational status.
    - Verify: `Accepted=True, Valid` → `Ready=True, Available`
    - Validates: lastTransitionTime updates, observedGeneration advances, operator properly recovers from errors
 
+11. **Recovery: Fix missing Secret** - Deploy with missing Secret reference, then create the Secret and verify recovery
+   - Initial state: `Accepted=False, Invalid` → `Ready=False, ConfigurationInvalid`
+   - Create missing Secret during test
+   - Verify: `Accepted=True, Valid` → `Ready=True, Available`
+   - Validates: lastTransitionTime updates, observedGeneration advances, Deployment and Pods successfully start
+
 **Note**: Individual `env` references (via `secretKeyRef` or `configMapKeyRef`) are not validated by the operator at the Accepted condition level. Kubernetes validates these at pod creation time, which would cause the Ready condition to become False with reason DeploymentUnavailable.
 
 ## Implementation Details
@@ -72,6 +78,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `08-empty-configmap-name-storage.yaml`
 - `09-empty-secret-name-storage.yaml`
 - `10-recovery-missing-configmap.yaml`
+- `11-recovery-missing-secret.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -128,7 +135,7 @@ This is useful for:
 
 ## Expected Results
 
-All 10 test cases should pass, validating:
+All 11 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked
