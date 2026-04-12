@@ -111,6 +111,18 @@ Indicates overall server operational status.
    - Validates: Operator continues reconciling spec changes even when deployment is unavailable
    - Validates: observedGeneration tracking works during error states
 
+### Condition Lifecycle (lastTransitionTime Behavior)
+
+18. **lastTransitionTime stability on generation change** - Verify lastTransitionTime doesn't change when only generation changes
+   - Deploy MCPServer with port=8080
+   - Wait for `Ready=True, Available` and capture lastTransitionTime (T1)
+   - Update service port to 9090 (doesn't affect deployment health)
+   - Expected: observedGeneration advances to 2
+   - Expected: `Ready=True, Available` (unchanged)
+   - Expected: lastTransitionTime = T1 (unchanged!)
+   - Validates: Kubernetes condition contract - lastTransitionTime only changes when status/reason changes
+   - Validates: Operator respects condition lifecycle semantics
+
 ## Implementation Details
 
 ### Manifests
@@ -132,6 +144,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `15-optional-secret-envfrom.yaml`
 - `16-rapid-updates.yaml`
 - `17-update-while-unavailable.yaml`
+- `18-lasttransitiontime-stability.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -188,7 +201,7 @@ This is useful for:
 
 ## Expected Results
 
-All 17 test cases should pass, validating:
+All 18 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

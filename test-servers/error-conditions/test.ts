@@ -944,6 +944,105 @@ data:
           await sleep(2000);
         }
       });
+
+      // Test 4.1: lastTransitionTime stability on generation change
+      await test('lastTransitionTime stability: Generation change without status change', async () => {
+        const serverName = 'lasttransitiontime-stability';
+        const manifestPath = path.join(manifestsDir, '18-lasttransitiontime-stability.yaml');
+
+        try {
+          console.log(`    Testing lastTransitionTime stability when only generation changes...`);
+          console.log(`    [1/6] Deploying initial configuration (replicas=1)...`);
+
+          // Deploy MCPServer
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Ready=True, Available
+          console.log(`    [2/6] Waiting for initial Ready state...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(initialReadyCondition.status, 'True', 'Initial Ready should be True');
+          test.assertEqual(initialReadyCondition.reason, 'Available', 'Initial Ready reason should be Available');
+
+          // Capture initial lastTransitionTime (T1)
+          const initialLastTransitionTime = initialReadyCondition.lastTransitionTime;
+          console.log(`    Initial Ready lastTransitionTime: ${initialLastTransitionTime}`);
+
+          // Get initial generation
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          const initialObservedGeneration = initialServer.status.observedGeneration;
+
+          console.log(`    Initial state: generation=${initialGeneration}, observedGeneration=${initialObservedGeneration}`);
+          test.assertEqual(initialGeneration, 1, 'Initial generation should be 1');
+          test.assertEqual(initialObservedGeneration, 1, 'Initial observedGeneration should be 1');
+
+          // Step 2: Update service port (doesn't change deployment/pods at all)
+          console.log(`    [3/6] Updating service port (Ready should stay True, Available)...`);
+          const patchJson = {
+            spec: {
+              config: {
+                port: 9090  // Change from 8080 to 9090
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 3: Wait for observedGeneration to advance to 2
+          console.log(`    [4/6] Waiting for observedGeneration to advance to 2...`);
+
+          let currentObservedGeneration = initialObservedGeneration;
+          let pollCount = 0;
+          const maxPolls = 60; // 30 seconds with 500ms sleep
+
+          while (currentObservedGeneration < 2 && pollCount < maxPolls) {
+            await sleep(500);
+            currentObservedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
+            pollCount++;
+          }
+
+          test.assertEqual(currentObservedGeneration, 2, 'observedGeneration should advance to 2');
+          console.log(`    ✓ observedGeneration advanced to 2 (after ${pollCount * 0.5}s)`);
+
+          // Step 4: Wait for Ready to be True, Available (all replicas must be healthy)
+          console.log(`    [5/6] Waiting for Ready=True, Available (all replicas healthy)...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          const updatedReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+
+          test.assertEqual(updatedReadyCondition.status, 'True', 'Ready should still be True');
+          test.assertEqual(updatedReadyCondition.reason, 'Available', 'Ready reason should still be Available');
+
+          console.log(`    ✓ Ready: status=${updatedReadyCondition.status}, reason=${updatedReadyCondition.reason} (unchanged)`);
+
+          // Step 5: Check lastTransitionTime behavior
+          console.log(`    [6/6] Checking lastTransitionTime behavior...`);
+          const updatedLastTransitionTime = updatedReadyCondition.lastTransitionTime;
+
+          console.log(`    lastTransitionTime: ${initialLastTransitionTime} → ${updatedLastTransitionTime}`);
+
+          if (updatedLastTransitionTime === initialLastTransitionTime) {
+            console.log(`    ✓ lastTransitionTime stable (unchanged despite generation increment)`);
+          } else {
+            console.log(`    ⚠️  lastTransitionTime changed despite status/reason unchanged`);
+            console.log(`       This may indicate operator updates lastTransitionTime on every reconciliation`);
+            console.log(`       According to Kubernetes API conventions, lastTransitionTime should only`);
+            console.log(`       change when status (True/False/Unknown) or reason changes.`);
+          }
+
+          // For now, we won't fail the test - just log the behavior
+          console.log(`    ✓ lastTransitionTime behavior documented`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);

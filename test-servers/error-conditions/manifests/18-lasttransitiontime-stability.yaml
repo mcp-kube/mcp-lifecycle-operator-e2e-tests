@@ -1,0 +1,17 @@
+---
+# Test Case: lastTransitionTime stability on generation change
+# Scenario: Update replicas without changing Ready status/reason - lastTransitionTime should NOT change
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: lasttransitiontime-stability
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+  runtime:
+    replicas: 1  # Will be updated to 3 during test (Ready stays True, Available)
