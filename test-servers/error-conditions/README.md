@@ -123,6 +123,15 @@ Indicates overall server operational status.
    - Validates: Kubernetes condition contract - lastTransitionTime only changes when status/reason changes
    - Validates: Operator respects condition lifecycle semantics
 
+19. **lastTransitionTime updates on reason change** - Verify lastTransitionTime DOES change when reason changes
+   - Deploy MCPServer with replicas=1
+   - Wait for `Ready=True, Available` and capture lastTransitionTime (T1)
+   - Scale to 0 replicas (Ready status stays True, but reason changes)
+   - Expected: `Ready=True, ScaledToZero` (reason changed from Available)
+   - Expected: lastTransitionTime = T2 where T2 > T1
+   - Validates: Kubernetes condition contract - lastTransitionTime updates when reason changes
+   - Validates: Operator correctly updates lastTransitionTime on reason transitions
+
 ## Implementation Details
 
 ### Manifests
@@ -145,6 +154,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `16-rapid-updates.yaml`
 - `17-update-while-unavailable.yaml`
 - `18-lasttransitiontime-stability.yaml`
+- `19-lasttransitiontime-reason-change.yaml`
 
 ### Test Script
 The `test.ts` script:
@@ -201,7 +211,7 @@ This is useful for:
 
 ## Expected Results
 
-All 18 test cases should pass, validating:
+All 19 test cases should pass, validating:
 - ✅ Accepted condition status and reason are correct
 - ✅ Ready condition status and reason are correct
 - ✅ observedGeneration is properly tracked

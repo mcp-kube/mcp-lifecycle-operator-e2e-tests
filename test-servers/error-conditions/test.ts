@@ -1043,6 +1043,98 @@ data:
           await sleep(2000);
         }
       });
+
+      // Test 4.2: lastTransitionTime updates on reason change
+      await test('lastTransitionTime updates: Reason change (Available → ScaledToZero)', async () => {
+        const serverName = 'lasttransitiontime-reason-change';
+        const manifestPath = path.join(manifestsDir, '19-lasttransitiontime-reason-change.yaml');
+
+        try {
+          console.log(`    Testing lastTransitionTime updates when reason changes...`);
+          console.log(`    [1/6] Deploying initial configuration (replicas=1)...`);
+
+          // Deploy MCPServer
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 1: Wait for Ready=True, Available
+          console.log(`    [2/6] Waiting for initial Ready state...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          const initialReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(initialReadyCondition.status, 'True', 'Initial Ready should be True');
+          test.assertEqual(initialReadyCondition.reason, 'Available', 'Initial Ready reason should be Available');
+
+          // Capture initial lastTransitionTime (T1)
+          const initialLastTransitionTime = initialReadyCondition.lastTransitionTime;
+          console.log(`    Initial Ready: status=${initialReadyCondition.status}, reason=${initialReadyCondition.reason}`);
+          console.log(`    Initial lastTransitionTime: ${initialLastTransitionTime}`);
+
+          // Get initial generation
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          // Wait 2 seconds to ensure we're in a different second (timestamps have second granularity)
+          await sleep(2000);
+
+          // Step 2: Scale to 0 replicas (changes reason from Available to ScaledToZero)
+          console.log(`    [3/6] Scaling to 0 replicas (reason should change to ScaledToZero)...`);
+          const patchJson = {
+            spec: {
+              runtime: {
+                replicas: 0
+              }
+            }
+          };
+          await execAsync(
+            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
+          );
+
+          // Step 3: Wait for Ready=True, ScaledToZero
+          console.log(`    [4/6] Waiting for Ready=True, ScaledToZero...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'ScaledToZero', namespace, 60);
+
+          const updatedReadyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          test.assertEqual(updatedReadyCondition.status, 'True', 'Ready should still be True');
+          test.assertEqual(updatedReadyCondition.reason, 'ScaledToZero', 'Ready reason should be ScaledToZero');
+
+          console.log(`    Updated Ready: status=${updatedReadyCondition.status}, reason=${updatedReadyCondition.reason}`);
+
+          // Step 4: Verify generation incremented
+          console.log(`    [5/6] Verifying generation incremented...`);
+          const updatedServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const updatedServer = JSON.parse(updatedServerJson.stdout);
+          const updatedGeneration = updatedServer.metadata.generation;
+
+          test.assertEqual(updatedGeneration, initialGeneration + 1, 'Generation should increment');
+          console.log(`    ✓ Generation incremented: ${initialGeneration} → ${updatedGeneration}`);
+
+          // Step 5: Verify lastTransitionTime changed
+          console.log(`    [6/6] Verifying lastTransitionTime changed...`);
+          const updatedLastTransitionTime = updatedReadyCondition.lastTransitionTime;
+
+          console.log(`    lastTransitionTime: ${initialLastTransitionTime} → ${updatedLastTransitionTime}`);
+
+          // Parse timestamps to compare
+          const t1 = new Date(initialLastTransitionTime);
+          const t2 = new Date(updatedLastTransitionTime);
+
+          test.assert(
+            t2 > t1,
+            `lastTransitionTime should change when reason changes (was: ${initialLastTransitionTime}, now: ${updatedLastTransitionTime})`
+          );
+
+          console.log(`    ✓ lastTransitionTime changed correctly (reason changed: Available → ScaledToZero)`);
+          console.log(`    ✓ Test validates Kubernetes API convention: lastTransitionTime updates on reason change`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
     });
   } catch (error) {
     console.error('Fatal error:', error);
