@@ -173,6 +173,37 @@ Indicates overall server operational status.
    - Documents: Transient state behavior for debugging timing issues
    - Note: Initializing is very fast and difficult to capture reliably
 
+### Ownership Validation (PR #91)
+
+**Note**: Ownership validation happens during **reconciliation**, not spec validation. This means:
+- `Accepted=True, Valid` (spec is valid - ConfigMaps/Secrets exist)
+- `Ready=False, DeploymentUnavailable` or `Ready=False, ServiceUnavailable` (reconciliation failed due to ownership conflict)
+- Error message in `Ready.message` explains the ownership issue
+
+23. **Reject foreign-owned Deployment** - Prevent controller wars by rejecting resources owned by other controllers
+   - Pre-create Deployment with ownerReference to a different controller
+   - Try to create MCPServer with same name
+   - Expected: `Accepted=True, Valid` (spec is valid)
+   - Expected: `Ready=False, DeploymentUnavailable` (reconciliation failed)
+   - Expected: Ready message mentions ownership conflict ("is owned by", "cannot be managed")
+   - Expected: Deployment remains unchanged (not modified by MCPServer controller)
+   - Validates: Operator respects existing controller ownership
+   - Validates: Prevents silent overwrites of foreign-owned resources
+   - Validates: Correct status reporting (ownership errors in Ready, not Accepted)
+   - Introduced in PR #91 to fix issue #85
+
+24. **Reject unowned Deployment/Service** - Prevent silent adoption of manually-created resources
+   - Pre-create Deployment and Service with no ownerReferences
+   - Try to create MCPServer with same name
+   - Expected: `Accepted=True, Valid` (spec is valid)
+   - Expected: `Ready=False, DeploymentUnavailable` (reconciliation failed)
+   - Expected: Ready message mentions missing owner ("has no controller owner")
+   - Expected: Deployment and Service remain unchanged (no ownerReferences added)
+   - Validates: Operator requires explicit ownership before managing resources
+   - Validates: User must delete existing resources or choose different name
+   - Validates: Correct status reporting (ownership errors in Ready, not Accepted)
+   - Introduced in PR #91 to fix issue #85
+
 ## Implementation Details
 
 ### Manifests
@@ -195,8 +226,10 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `16-rapid-updates.yaml`
 - `17-update-while-unavailable.yaml`
 - `18-lasttransitiontime-stability.yaml`
-- `20-lasttransitiontime-recovery.yaml`
-- `21-recovery-bad-image.yaml`
+- `19-foreign-owned-deployment.yaml`
+- `20-unowned-resources.yaml`
+- `20-lasttransitiontime-recovery.yaml` (legacy numbering)
+- `21-recovery-bad-image.yaml` (legacy numbering)
 - `23-observedgeneration-consistency.yaml`
 - `24-initializing-state-capture.yaml`
 

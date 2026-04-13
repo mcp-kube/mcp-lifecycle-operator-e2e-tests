@@ -1484,6 +1484,288 @@ EOF`);
           await sleep(2000);
         }
       });
+
+      // Ownership validation test: Foreign-owned Deployment
+      await test('Ownership validation: Reject foreign-owned Deployment', async () => {
+        const serverName = 'foreign-owned-deployment';
+        const manifestPath = path.join(manifestsDir, '19-foreign-owned-deployment.yaml');
+
+        console.log(`    Testing rejection of foreign-owned Deployment...`);
+        console.log(`    `);
+        console.log(`    Expected behavior (PR #91):`);
+        console.log(`    - Accepted=True, Valid (spec is valid)`);
+        console.log(`    - Ready=False, DeploymentUnavailable (reconciliation failed)`);
+        console.log(`    - Ready message mentions ownership conflict`);
+        console.log(`    `);
+
+        try {
+          // Step 1: Pre-create a Deployment owned by a different controller
+          console.log(`    [1/6] Creating Deployment owned by different controller...`);
+
+          // Create a fake controller owner to simulate another controller
+          const fakeControllerYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fake-controller-owner
+  namespace: ${namespace}
+data:
+  placeholder: "fake controller for testing"
+`;
+          const fakeControllerFile = `/tmp/fake-controller.yaml`;
+          fs.writeFileSync(fakeControllerFile, fakeControllerYaml);
+          await execAsync(`kubectl apply -f ${fakeControllerFile}`);
+
+          // Get the UID of the fake controller
+          const fakeControllerJson = await execAsync(`kubectl get configmap fake-controller-owner -n ${namespace} -o json`);
+          const fakeController = JSON.parse(fakeControllerJson.stdout);
+          const fakeControllerUID = fakeController.metadata.uid;
+
+          // Create a Deployment with ownerReference pointing to the fake controller
+          const foreignDeploymentYaml = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${serverName}
+  namespace: ${namespace}
+  ownerReferences:
+    - apiVersion: v1
+      kind: ConfigMap
+      name: fake-controller-owner
+      uid: ${fakeControllerUID}
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: foreign-owned
+  template:
+    metadata:
+      labels:
+        app: foreign-owned
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+`;
+          const foreignDeploymentFile = `/tmp/foreign-deployment.yaml`;
+          fs.writeFileSync(foreignDeploymentFile, foreignDeploymentYaml);
+          await execAsync(`kubectl apply -f ${foreignDeploymentFile}`);
+
+          console.log(`    ✓ Foreign-owned Deployment created`);
+
+          // Step 2: Try to create MCPServer with same name
+          console.log(`    [2/6] Deploying MCPServer with same name...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 3: Spec validation should pass (Accepted=True, Valid)
+          console.log(`    [3/6] Waiting for Accepted=True, Valid (spec is valid)...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Accepted',
+            'True',
+            'Valid',
+            namespace,
+            30
+          );
+
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True (spec is valid)');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+
+          // Step 4: Reconciliation should fail (Ready=False, DeploymentUnavailable)
+          console.log(`    [4/6] Waiting for Ready=False, DeploymentUnavailable (reconciliation fails)...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Ready',
+            'False',
+            'DeploymentUnavailable',
+            namespace,
+            30
+          );
+
+          const readyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          console.log(`    Ready: status=${readyCondition.status}, reason=${readyCondition.reason}`);
+          console.log(`    Ready message: ${readyCondition.message}`);
+
+          // Step 5: Verify error message mentions ownership
+          console.log(`    [5/6] Verifying error message mentions ownership conflict...`);
+          test.assertEqual(readyCondition.status, 'False', 'Ready should be False');
+          test.assertEqual(readyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
+          test.assert(
+            readyCondition.message.includes('is owned by') ||
+            readyCondition.message.includes('cannot be managed') ||
+            readyCondition.message.includes('ownership'),
+            `Ready message should mention ownership conflict: ${readyCondition.message}`
+          );
+
+          // Step 6: Verify Deployment was NOT modified (still has foreign owner)
+          console.log(`    [6/6] Verifying Deployment unchanged...`);
+          const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const deployment = JSON.parse(deploymentJson.stdout);
+
+          test.assert(
+            deployment.metadata.ownerReferences.length === 1,
+            'Deployment should still have exactly one owner'
+          );
+          test.assertEqual(
+            deployment.metadata.ownerReferences[0].name,
+            'fake-controller-owner',
+            'Deployment should still be owned by fake controller'
+          );
+
+          console.log(`    ✓ Ownership validation correctly rejected foreign-owned Deployment`);
+          console.log(`    ✓ Accepted=True (spec valid), Ready=False (reconciliation failed)`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete deployment ${serverName} -n ${namespace} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap fake-controller-owner -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // Ownership validation test: Unowned resources
+      await test('Ownership validation: Reject unowned Deployment/Service', async () => {
+        const serverName = 'unowned-resources';
+        const manifestPath = path.join(manifestsDir, '20-unowned-resources.yaml');
+
+        console.log(`    Testing rejection of unowned Deployment/Service...`);
+        console.log(`    `);
+        console.log(`    Expected behavior (PR #91):`);
+        console.log(`    - Accepted=True, Valid (spec is valid)`);
+        console.log(`    - Ready=False, DeploymentUnavailable (reconciliation failed)`);
+        console.log(`    - Ready message mentions missing owner`);
+        console.log(`    `);
+
+        try {
+          // Step 1: Pre-create Deployment and Service with no ownerReferences
+          console.log(`    [1/6] Creating unowned Deployment and Service...`);
+
+          const unownedDeploymentYaml = `
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${serverName}
+  namespace: ${namespace}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unowned
+  template:
+    metadata:
+      labels:
+        app: unowned
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+`;
+          const unownedServiceYaml = `
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${serverName}
+  namespace: ${namespace}
+spec:
+  selector:
+    app: unowned
+  ports:
+  - port: 80
+    targetPort: 80
+`;
+          const unownedDeploymentFile = `/tmp/unowned-deployment.yaml`;
+          const unownedServiceFile = `/tmp/unowned-service.yaml`;
+          fs.writeFileSync(unownedDeploymentFile, unownedDeploymentYaml);
+          fs.writeFileSync(unownedServiceFile, unownedServiceYaml);
+          await execAsync(`kubectl apply -f ${unownedDeploymentFile}`);
+          await execAsync(`kubectl apply -f ${unownedServiceFile}`);
+
+          console.log(`    ✓ Unowned Deployment and Service created`);
+
+          // Step 2: Try to create MCPServer with same name
+          console.log(`    [2/6] Deploying MCPServer with same name...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 3: Spec validation should pass (Accepted=True, Valid)
+          console.log(`    [3/6] Waiting for Accepted=True, Valid (spec is valid)...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Accepted',
+            'True',
+            'Valid',
+            namespace,
+            30
+          );
+
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          console.log(`    Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True (spec is valid)');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+
+          // Step 4: Reconciliation should fail (Ready=False, DeploymentUnavailable)
+          console.log(`    [4/6] Waiting for Ready=False, DeploymentUnavailable (reconciliation fails)...`);
+          await k8s.waitForCondition(
+            serverName,
+            'Ready',
+            'False',
+            'DeploymentUnavailable',
+            namespace,
+            30
+          );
+
+          const readyCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+          console.log(`    Ready: status=${readyCondition.status}, reason=${readyCondition.reason}`);
+          console.log(`    Ready message: ${readyCondition.message}`);
+
+          // Step 5: Verify error message mentions missing owner
+          console.log(`    [5/6] Verifying error message mentions missing owner...`);
+          test.assertEqual(readyCondition.status, 'False', 'Ready should be False');
+          test.assertEqual(readyCondition.reason, 'DeploymentUnavailable', 'Ready reason should be DeploymentUnavailable');
+          test.assert(
+            readyCondition.message.includes('has no controller owner') ||
+            readyCondition.message.includes('no controller owner'),
+            `Ready message should mention missing owner: ${readyCondition.message}`
+          );
+
+          // Step 6: Verify Deployment and Service were NOT modified (still have no owner)
+          console.log(`    [6/6] Verifying resources unchanged...`);
+          const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const deployment = JSON.parse(deploymentJson.stdout);
+
+          test.assert(
+            !deployment.metadata.ownerReferences || deployment.metadata.ownerReferences.length === 0,
+            'Deployment should still have no owner references'
+          );
+
+          const serviceJson = await execAsync(`kubectl get service ${serverName} -n ${namespace} -o json`);
+          const service = JSON.parse(serviceJson.stdout);
+
+          test.assert(
+            !service.metadata.ownerReferences || service.metadata.ownerReferences.length === 0,
+            'Service should still have no owner references'
+          );
+
+          console.log(`    ✓ Ownership validation correctly rejected unowned resources`);
+          console.log(`    ✓ Accepted=True (spec valid), Ready=False (reconciliation failed)`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete deployment ${serverName} -n ${namespace} --ignore-not-found=true`);
+          await execAsync(`kubectl delete service ${serverName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
     });
   } catch (error) {
     console.error('Fatal error:', error);

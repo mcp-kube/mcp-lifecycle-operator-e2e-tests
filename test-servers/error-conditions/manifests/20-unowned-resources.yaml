@@ -1,0 +1,16 @@
+---
+# Test Case: Accepted=False, Reason=Invalid
+# Scenario: MCPServer tries to manage resources with no controller owner
+# This manifest will be used after pre-creating unowned Deployment and Service
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: unowned-resources
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: ghcr.io/modelcontextprotocol/servers/everything:latest
+  config:
+    port: 8080
