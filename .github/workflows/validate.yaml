@@ -97,8 +97,8 @@ jobs:
           for test_dir in test-servers/*/; do
             server_name=$(basename "$test_dir")
 
-            # Skip template
-            if [ "$server_name" = "template" ]; then
+            # Skip special cases with different structures
+            if [ "$server_name" = "template" ] || [ "$server_name" = "error-conditions" ] || [ "$server_name" = "update-operations" ]; then
               continue
             fi
 

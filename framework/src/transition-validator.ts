@@ -18,8 +18,8 @@ export interface ExpectedTransition {
   // Expected status (True, False, Unknown)
   status: 'True' | 'False' | 'Unknown';
 
-  // Expected reason
-  reason: string;
+  // Expected reason (optional - if not specified, matches any reason)
+  reason?: string;
 
   // Optional: message should contain this substring
   messageContains?: string;
@@ -187,7 +187,7 @@ export class TransitionValidator {
 
           const matches =
             condition.status === forbidden.status &&
-            condition.reason === forbidden.reason;
+            (!forbidden.reason || condition.reason === forbidden.reason);
 
           const messageMatch =
             !forbidden.messageContains ||
@@ -196,11 +196,12 @@ export class TransitionValidator {
           if (matches && messageMatch) {
             errors.push(
               `❌ FORBIDDEN transition found in sequence ${transition.sequenceNumber}: ` +
-                `${forbidden.conditionType}=${forbidden.status}, reason=${forbidden.reason}` +
+                `${forbidden.conditionType}=${forbidden.status}` +
+                (forbidden.reason ? `, reason=${forbidden.reason}` : '') +
                 (forbidden.messageContains
                   ? `, message contains "${forbidden.messageContains}"`
                   : '') +
-                `\n   Actual message: "${condition.message.substring(0, 100)}..."`
+                `\n   Actual: reason=${condition.reason}, message: "${condition.message.substring(0, 100)}..."`
             );
           }
         }
@@ -237,7 +238,8 @@ export class TransitionValidator {
         if (i >= relevantTransitions.length) {
           errors.push(
             `❌ Expected transition ${i + 1} not found: ` +
-              `${expected.conditionType}=${expected.status}, reason=${expected.reason}`
+              `${expected.conditionType}=${expected.status}` +
+              (expected.reason ? `, reason=${expected.reason}` : '')
           );
           continue;
         }
@@ -262,8 +264,8 @@ export class TransitionValidator {
           );
         }
 
-        // Check reason
-        if (actualCondition.reason !== expected.reason) {
+        // Check reason (if specified)
+        if (expected.reason && actualCondition.reason !== expected.reason) {
           errors.push(
             `❌ Transition ${i + 1}: ${expected.conditionType} reason mismatch. ` +
               `Expected: ${expected.reason}, Actual: ${actualCondition.reason}`
