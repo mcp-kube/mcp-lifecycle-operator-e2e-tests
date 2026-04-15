@@ -1,0 +1,24 @@
+---
+# Test Case: ConfigMap update triggers reconciliation but Deployment does NOT update
+# Scenario: Update ConfigMap content, verify reconciliation happens but Deployment unchanged
+# Expected: Accepted=True (validation passes), Deployment resourceVersion unchanged
+# Why: Pods reference ConfigMaps by name, not content (standard K8s behavior)
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: configmap-update-watch
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: test-update-configmap

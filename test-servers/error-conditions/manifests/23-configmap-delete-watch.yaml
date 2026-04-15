@@ -1,0 +1,24 @@
+---
+# Test Case: ConfigMap deletion triggers reconciliation and auto-recovery
+# Scenario: Delete ConfigMap, verify error state, recreate and verify auto-recovery
+# Expected: Accepted=False after delete, Deployment/Pods keep running, auto-recovery on recreate
+# Why: Standard K8s behavior - no cascade delete, auto-recovery via watch
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: configmap-delete-watch
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: test-delete-configmap

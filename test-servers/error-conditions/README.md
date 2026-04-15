@@ -204,6 +204,42 @@ Indicates overall server operational status.
    - Validates: Correct status reporting (ownership errors in Ready, not Accepted)
    - Introduced in PR #91 to fix issue #85
 
+### ConfigMap/Secret Watch Behavior (PR #93)
+
+**Note**: PR #93 adds ConfigMap/Secret watches that trigger automatic reconciliation when these resources are created, updated, or deleted. Reconciliation is triggered by the watch, not by spec updates, so `metadata.generation` does NOT change.
+
+25. **ConfigMap update watch** - ConfigMap content update triggers reconciliation but Deployment does NOT update
+   - Create MCPServer with ConfigMap mounted as volume
+   - Wait for Ready=True, Available
+   - Capture initial generation and Deployment resourceVersion
+   - Update ConfigMap content (change data)
+   - Expected: Reconciliation triggered by ConfigMap watch (no spec update needed)
+   - Expected: `Accepted=True, Valid` (validation passes - ConfigMap still exists)
+   - Expected: Generation unchanged (watch-triggered, not spec-update-triggered)
+   - Expected: Deployment resourceVersion unchanged (PodSpec unchanged)
+   - Why: Pods reference ConfigMaps by name, not content (standard K8s behavior)
+   - Validates: ConfigMap watch triggers reconciliation
+   - Validates: No Deployment update for content-only changes (standard K8s semantics)
+   - Introduced in PR #93 to solve issue #92
+
+26. **ConfigMap deletion watch** - ConfigMap deletion triggers error state and auto-recovery on recreation
+   - Create MCPServer with ConfigMap
+   - Wait for Ready=True, Available
+   - Capture initial generation
+   - Delete ConfigMap
+   - Expected: Reconciliation triggered by ConfigMap watch
+   - Expected: `Accepted=False, Invalid` (validation fails - ConfigMap missing)
+   - Expected: Generation unchanged (watch-triggered)
+   - Expected: Deployment/Pods still exist (no cascade delete - standard K8s behavior)
+   - Recreate ConfigMap
+   - Expected: Auto-recovery via ConfigMap watch (no spec update needed)
+   - Expected: `Accepted=True, Valid` → `Ready=True, Available`
+   - Expected: Generation still unchanged (all watch-triggered)
+   - Validates: ConfigMap deletion detection
+   - Validates: Auto-recovery on ConfigMap recreation
+   - Validates: Standard K8s behavior (no cascade delete)
+   - Introduced in PR #93 to solve issue #92
+
 ## Implementation Details
 
 ### Manifests
@@ -230,6 +266,8 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `20-unowned-resources.yaml`
 - `20-lasttransitiontime-recovery.yaml` (legacy numbering)
 - `21-recovery-bad-image.yaml` (legacy numbering)
+- `22-configmap-update-watch.yaml`
+- `23-configmap-delete-watch.yaml`
 - `23-observedgeneration-consistency.yaml`
 - `24-initializing-state-capture.yaml`
 

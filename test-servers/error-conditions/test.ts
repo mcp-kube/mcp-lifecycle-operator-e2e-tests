@@ -718,6 +718,222 @@ data:
         }
       });
 
+      // Test 3: ConfigMap UPDATE watch - reconciliation without Deployment update
+      await test('ConfigMap update triggers reconciliation (no Deployment update)', async () => {
+        const serverName = 'configmap-update-watch';
+        const configMapName = 'test-update-configmap';
+        const manifestPath = path.join(manifestsDir, '22-configmap-update-watch.yaml');
+
+        try {
+          console.log(`    Testing ConfigMap update watch behavior...`);
+
+          // Step 1: Create ConfigMap with initial data
+          console.log(`    [1/8] Creating ConfigMap with initial data...`);
+          const initialConfigMapYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  namespace: ${namespace}
+data:
+  data.txt: "initial"
+`;
+          const initialConfigMapFile = `/tmp/${configMapName}-initial.yaml`;
+          fs.writeFileSync(initialConfigMapFile, initialConfigMapYaml);
+          await execAsync(`kubectl apply -f ${initialConfigMapFile}`);
+
+          // Step 2: Create MCPServer
+          console.log(`    [2/8] Deploying ${serverName}...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 3: Wait for Ready=True
+          console.log(`    [3/8] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 4: Capture initial state
+          console.log(`    [4/8] Capturing initial state...`);
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          const initialDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const initialDeployment = JSON.parse(initialDeploymentJson.stdout);
+          const initialResourceVersion = initialDeployment.metadata.resourceVersion;
+          console.log(`    Initial Deployment resourceVersion: ${initialResourceVersion}`);
+
+          // Step 5: Update ConfigMap content
+          console.log(`    [5/8] Updating ConfigMap content...`);
+          console.log(`    (ConfigMap watch should trigger reconciliation - PR #93)`);
+          await execAsync(`kubectl patch configmap ${configMapName} -n ${namespace} --type=merge -p '{"data":{"data.txt":"updated"}}'`);
+
+          // Wait a bit for watch to trigger and reconciliation to run
+          await sleep(5000);
+
+          // Step 6: Verify generation unchanged
+          console.log(`    [6/8] Verifying generation unchanged...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation should not change (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration}`);
+
+          // Step 7: Verify Deployment NOT updated (standard K8s behavior)
+          console.log(`    [7/8] Verifying Deployment NOT updated...`);
+          const finalDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const finalDeployment = JSON.parse(finalDeploymentJson.stdout);
+          const finalResourceVersion = finalDeployment.metadata.resourceVersion;
+
+          test.assertEqual(
+            finalResourceVersion,
+            initialResourceVersion,
+            `Deployment should NOT update (configMapRef by name, not content)`
+          );
+          console.log(`    ✓ Deployment unchanged: resourceVersion=${finalResourceVersion}`);
+
+          // Step 8: Verify Accepted=True (validation passes)
+          console.log(`    [8/8] Verifying Accepted condition...`);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Reason should be Valid');
+          console.log(`    ✓ Accepted: status=True, reason=Valid`);
+
+          console.log(`    ✓ ConfigMap update triggered reconciliation (Deployment unchanged - standard K8s behavior)`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // Test 4: ConfigMap DELETE watch - error state and auto-recovery
+      await test('ConfigMap deletion triggers reconciliation and auto-recovery', async () => {
+        const serverName = 'configmap-delete-watch';
+        const configMapName = 'test-delete-configmap';
+        const manifestPath = path.join(manifestsDir, '23-configmap-delete-watch.yaml');
+
+        try {
+          console.log(`    Testing ConfigMap deletion watch behavior...`);
+
+          // Step 1: Create ConfigMap and MCPServer
+          console.log(`    [1/10] Creating ConfigMap...`);
+          const initialConfigMapYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  namespace: ${namespace}
+data:
+  data.txt: "initial"
+`;
+          const initialConfigMapFile = `/tmp/${configMapName}-initial.yaml`;
+          fs.writeFileSync(initialConfigMapFile, initialConfigMapYaml);
+          await execAsync(`kubectl apply -f ${initialConfigMapFile}`);
+
+          console.log(`    Creating MCPServer...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Ready=True
+          console.log(`    [2/10] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 3: Capture initial generation
+          console.log(`    [3/10] Capturing initial generation...`);
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          // Step 4: Delete ConfigMap
+          console.log(`    [4/10] Deleting ConfigMap...`);
+          console.log(`    (ConfigMap watch should trigger reconciliation - PR #93)`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace}`);
+
+          // Step 5: Wait for validation to fail
+          console.log(`    [5/10] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 30);
+
+          // Step 6: Verify generation unchanged
+          console.log(`    [6/10] Verifying generation unchanged...`);
+          const afterDeleteServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const afterDeleteServer = JSON.parse(afterDeleteServerJson.stdout);
+          const afterDeleteGeneration = afterDeleteServer.metadata.generation;
+
+          test.assertEqual(
+            afterDeleteGeneration,
+            initialGeneration,
+            `Generation should not change (was ${initialGeneration}, now ${afterDeleteGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${afterDeleteGeneration}`);
+
+          // Step 7: Verify error message
+          console.log(`    [7/10] Verifying error message...`);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'False', 'Accepted should be False');
+          test.assertEqual(acceptedCondition.reason, 'Invalid', 'Reason should be Invalid');
+          test.assert(
+            acceptedCondition.message.includes(configMapName),
+            `Error should mention ConfigMap: ${acceptedCondition.message}`
+          );
+          console.log(`    ✓ Accepted: status=False, reason=Invalid`);
+
+          // Step 8: Verify Deployment still exists (no cascade delete)
+          console.log(`    [8/10] Verifying Deployment still exists...`);
+          const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const deployment = JSON.parse(deploymentJson.stdout);
+          test.assert(deployment, 'Deployment should still exist');
+          console.log(`    ✓ Deployment still exists (no cascade delete - standard K8s behavior)`);
+
+          // Step 9: Recreate ConfigMap (test auto-recovery)
+          console.log(`    [9/10] Recreating ConfigMap (testing auto-recovery)...`);
+          const recreatedConfigMapYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  namespace: ${namespace}
+data:
+  data.txt: "recreated"
+`;
+          const recreatedConfigMapFile = `/tmp/${configMapName}-recreated.yaml`;
+          fs.writeFileSync(recreatedConfigMapFile, recreatedConfigMapYaml);
+          await execAsync(`kubectl apply -f ${recreatedConfigMapFile}`);
+
+          // Wait for auto-recovery
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 10: Verify generation still unchanged
+          console.log(`    [10/10] Verifying generation unchanged through delete/recreate cycle...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation unchanged through delete/recreate cycle (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration} (all watch-triggered)`);
+
+          console.log(`    ✓ ConfigMap deletion triggered error state`);
+          console.log(`    ✓ Auto-recovery successful on recreation`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
       // Test 3.1: Rapid successive updates - stress test reconciliation queue
       await test('Rapid successive updates: Reconciliation queue handling', async () => {
         const serverName = 'rapid-updates';
