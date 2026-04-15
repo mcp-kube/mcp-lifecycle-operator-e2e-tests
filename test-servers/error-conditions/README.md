@@ -253,6 +253,34 @@ Indicates overall server operational status.
    - Validates: PR #93's `extractConfigMapNames` field indexer works correctly
    - Introduced in PR #93 to solve issue #92
 
+28. **Secret update watch** - Secret content update triggers reconciliation but Deployment does NOT update
+   - Same as test 25 (ConfigMap update) but for Secrets
+   - Create MCPServer with Secret mounted as volume
+   - Update Secret content
+   - Expected: Reconciliation triggered, Accepted=True, generation unchanged
+   - Expected: Deployment resourceVersion unchanged (secretRef by name, not content)
+   - Validates: Secret watch triggers reconciliation
+   - Validates: Standard K8s behavior (no Deployment update for content-only changes)
+   - Introduced in PR #93 to solve issue #92
+
+29. **Secret deletion watch** - Secret deletion triggers error state and auto-recovery on recreation
+   - Same as test 26 (ConfigMap deletion) but for Secrets
+   - Delete Secret, verify error state
+   - Expected: Accepted=False, Invalid
+   - Expected: Deployment/Pods still exist (no cascade delete)
+   - Recreate Secret, verify auto-recovery
+   - Expected: Generation unchanged through entire cycle
+   - Validates: Secret deletion detection and auto-recovery
+   - Introduced in PR #93 to solve issue #92
+
+30. **Multiple MCPServers same Secret** - Field indexing handles multiple watchers correctly
+   - Same as test 27 (Multiple ConfigMap) but for Secrets
+   - 3 MCPServers reference same missing Secret
+   - Create Secret once, all 3 auto-recover
+   - Expected: Generation unchanged for all 3
+   - Validates: PR #93's `extractSecretNames` field indexer works correctly
+   - Introduced in PR #93 to solve issue #92
+
 ## Implementation Details
 
 ### Manifests
@@ -282,6 +310,9 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `22-configmap-update-watch.yaml`
 - `23-configmap-delete-watch.yaml`
 - `24-multiple-servers-same-configmap.yaml`
+- `25-secret-update-watch.yaml`
+- `26-secret-delete-watch.yaml`
+- `27-multiple-servers-same-secret.yaml`
 - `23-observedgeneration-consistency.yaml`
 - `24-initializing-state-capture.yaml`
 

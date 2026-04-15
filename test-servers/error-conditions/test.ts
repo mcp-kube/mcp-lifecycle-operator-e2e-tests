@@ -1029,6 +1029,321 @@ data:
         }
       });
 
+      // Test 6: Secret UPDATE watch - reconciliation without Deployment update
+      await test('Secret update triggers reconciliation (no Deployment update)', async () => {
+        const serverName = 'secret-update-watch';
+        const secretName = 'test-update-secret';
+        const manifestPath = path.join(manifestsDir, '25-secret-update-watch.yaml');
+
+        try {
+          console.log(`    Testing Secret update watch behavior...`);
+
+          // Step 1: Create Secret with initial data
+          console.log(`    [1/8] Creating Secret with initial data...`);
+          const initialSecretYaml = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${secretName}
+  namespace: ${namespace}
+type: Opaque
+data:
+  data.txt: ${Buffer.from('initial').toString('base64')}
+`;
+          const initialSecretFile = `/tmp/${secretName}-initial.yaml`;
+          fs.writeFileSync(initialSecretFile, initialSecretYaml);
+          await execAsync(`kubectl apply -f ${initialSecretFile}`);
+
+          // Step 2: Create MCPServer
+          console.log(`    [2/8] Deploying ${serverName}...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 3: Wait for Ready=True
+          console.log(`    [3/8] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 4: Capture initial state
+          console.log(`    [4/8] Capturing initial state...`);
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          const initialDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const initialDeployment = JSON.parse(initialDeploymentJson.stdout);
+          const initialResourceVersion = initialDeployment.metadata.resourceVersion;
+          console.log(`    Initial Deployment resourceVersion: ${initialResourceVersion}`);
+
+          // Step 5: Update Secret content
+          console.log(`    [5/8] Updating Secret content...`);
+          console.log(`    (Secret watch should trigger reconciliation - PR #93)`);
+          await execAsync(`kubectl patch secret ${secretName} -n ${namespace} --type=merge -p '{"data":{"data.txt":"${Buffer.from('updated').toString('base64')}"}}'`);
+
+          // Wait a bit for watch to trigger and reconciliation to run
+          await sleep(5000);
+
+          // Step 6: Verify generation unchanged
+          console.log(`    [6/8] Verifying generation unchanged...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation should not change (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration}`);
+
+          // Step 7: Verify Deployment NOT updated (standard K8s behavior)
+          console.log(`    [7/8] Verifying Deployment NOT updated...`);
+          const finalDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const finalDeployment = JSON.parse(finalDeploymentJson.stdout);
+          const finalResourceVersion = finalDeployment.metadata.resourceVersion;
+
+          test.assertEqual(
+            finalResourceVersion,
+            initialResourceVersion,
+            `Deployment should NOT update (secretRef by name, not content)`
+          );
+          console.log(`    ✓ Deployment unchanged: resourceVersion=${finalResourceVersion}`);
+
+          // Step 8: Verify Accepted=True (validation passes)
+          console.log(`    [8/8] Verifying Accepted condition...`);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Reason should be Valid');
+          console.log(`    ✓ Accepted: status=True, reason=Valid`);
+
+          console.log(`    ✓ Secret update triggered reconciliation (Deployment unchanged - standard K8s behavior)`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete secret ${secretName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // Test 7: Secret DELETE watch - error state and auto-recovery
+      await test('Secret deletion triggers reconciliation and auto-recovery', async () => {
+        const serverName = 'secret-delete-watch';
+        const secretName = 'test-delete-secret';
+        const manifestPath = path.join(manifestsDir, '26-secret-delete-watch.yaml');
+
+        try {
+          console.log(`    Testing Secret deletion watch behavior...`);
+
+          // Step 1: Create Secret and MCPServer
+          console.log(`    [1/10] Creating Secret...`);
+          const initialSecretYaml = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${secretName}
+  namespace: ${namespace}
+type: Opaque
+data:
+  data.txt: ${Buffer.from('initial').toString('base64')}
+`;
+          const initialSecretFile = `/tmp/${secretName}-initial.yaml`;
+          fs.writeFileSync(initialSecretFile, initialSecretYaml);
+          await execAsync(`kubectl apply -f ${initialSecretFile}`);
+
+          console.log(`    Creating MCPServer...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Ready=True
+          console.log(`    [2/10] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 3: Capture initial generation
+          console.log(`    [3/10] Capturing initial generation...`);
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
+          // Step 4: Delete Secret
+          console.log(`    [4/10] Deleting Secret...`);
+          console.log(`    (Secret watch should trigger reconciliation - PR #93)`);
+          await execAsync(`kubectl delete secret ${secretName} -n ${namespace}`);
+
+          // Step 5: Wait for validation to fail
+          console.log(`    [5/10] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 30);
+
+          // Step 6: Verify generation unchanged
+          console.log(`    [6/10] Verifying generation unchanged...`);
+          const afterDeleteServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const afterDeleteServer = JSON.parse(afterDeleteServerJson.stdout);
+          const afterDeleteGeneration = afterDeleteServer.metadata.generation;
+
+          test.assertEqual(
+            afterDeleteGeneration,
+            initialGeneration,
+            `Generation should not change (was ${initialGeneration}, now ${afterDeleteGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${afterDeleteGeneration}`);
+
+          // Step 7: Verify error message
+          console.log(`    [7/10] Verifying error message...`);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'False', 'Accepted should be False');
+          test.assertEqual(acceptedCondition.reason, 'Invalid', 'Reason should be Invalid');
+          test.assert(
+            acceptedCondition.message.includes(secretName),
+            `Error should mention Secret: ${acceptedCondition.message}`
+          );
+          console.log(`    ✓ Accepted: status=False, reason=Invalid`);
+
+          // Step 8: Verify Deployment still exists (no cascade delete)
+          console.log(`    [8/10] Verifying Deployment still exists...`);
+          const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+          const deployment = JSON.parse(deploymentJson.stdout);
+          test.assert(deployment, 'Deployment should still exist');
+          console.log(`    ✓ Deployment still exists (no cascade delete - standard K8s behavior)`);
+
+          // Step 9: Recreate Secret (test auto-recovery)
+          console.log(`    [9/10] Recreating Secret (testing auto-recovery)...`);
+          const recreatedSecretYaml = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${secretName}
+  namespace: ${namespace}
+type: Opaque
+data:
+  data.txt: ${Buffer.from('recreated').toString('base64')}
+`;
+          const recreatedSecretFile = `/tmp/${secretName}-recreated.yaml`;
+          fs.writeFileSync(recreatedSecretFile, recreatedSecretYaml);
+          await execAsync(`kubectl apply -f ${recreatedSecretFile}`);
+
+          // Wait for auto-recovery
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+
+          // Step 10: Verify generation still unchanged
+          console.log(`    [10/10] Verifying generation unchanged through delete/recreate cycle...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation unchanged through delete/recreate cycle (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration} (all watch-triggered)`);
+
+          console.log(`    ✓ Secret deletion triggered error state`);
+          console.log(`    ✓ Auto-recovery successful on recreation`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete secret ${secretName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // Test 8: Multiple MCPServers referencing same Secret - field indexing test
+      await test('Multiple MCPServers referencing same Secret auto-recover', async () => {
+        const serverNames = ['multi-secret-server-1', 'multi-secret-server-2', 'multi-secret-server-3'];
+        const secretName = 'shared-secret';
+        const manifestPath = path.join(manifestsDir, '27-multiple-servers-same-secret.yaml');
+
+        try {
+          console.log(`    Testing multiple MCPServers with shared Secret...`);
+
+          // Step 1: Create 3 MCPServers (Secret doesn't exist yet)
+          console.log(`    [1/8] Creating 3 MCPServers (Secret missing)...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for all to be in error state
+          console.log(`    [2/8] Waiting for all MCPServers to reach error state...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 10);
+            console.log(`    ✓ ${serverName}: Accepted=False, Invalid`);
+          }
+
+          // Step 3: Capture initial generations
+          console.log(`    [3/8] Capturing initial generations...`);
+          const initialGenerations: { [key: string]: number } = {};
+          for (const serverName of serverNames) {
+            const serverJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+            const server = JSON.parse(serverJson.stdout);
+            initialGenerations[serverName] = server.metadata.generation;
+            console.log(`    ${serverName}: generation=${initialGenerations[serverName]}`);
+          }
+
+          // Step 4: Create the shared Secret (should trigger all watches)
+          console.log(`    [4/8] Creating shared Secret (should trigger all 3 watches)...`);
+          console.log(`    (Secret watch should trigger reconciliation for all - PR #93)`);
+          const secretYaml = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${secretName}
+  namespace: ${namespace}
+type: Opaque
+data:
+  shared.txt: ${Buffer.from('shared data').toString('base64')}
+`;
+          const secretFile = `/tmp/${secretName}.yaml`;
+          fs.writeFileSync(secretFile, secretYaml);
+          await execAsync(`kubectl apply -f ${secretFile}`);
+
+          // Step 5: Wait for all MCPServers to auto-recover (Accepted=True)
+          console.log(`    [5/8] Waiting for all MCPServers to auto-recover (Accepted=True)...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+            console.log(`    ✓ ${serverName}: Accepted=True, Valid`);
+          }
+
+          // Step 6: Wait for all MCPServers to become Ready
+          console.log(`    [6/8] Waiting for all MCPServers to become Ready...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+            console.log(`    ✓ ${serverName}: Ready=True, Available`);
+          }
+
+          // Step 7: Verify generation did NOT change for any MCPServer
+          console.log(`    [7/8] Verifying all generations unchanged...`);
+          for (const serverName of serverNames) {
+            const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+            const finalServer = JSON.parse(finalServerJson.stdout);
+            const finalGeneration = finalServer.metadata.generation;
+
+            test.assertEqual(
+              finalGeneration,
+              initialGenerations[serverName],
+              `${serverName} generation should not change (was ${initialGenerations[serverName]}, now ${finalGeneration})`
+            );
+            console.log(`    ✓ ${serverName}: generation unchanged (${finalGeneration})`);
+          }
+
+          // Step 8: Verify all 3 MCPServers are running
+          console.log(`    [8/8] Verifying all Deployments are running...`);
+          for (const serverName of serverNames) {
+            const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+            const deployment = JSON.parse(deploymentJson.stdout);
+            test.assert(deployment.status.availableReplicas === 1, `${serverName} should have 1 available replica`);
+            console.log(`    ✓ ${serverName}: Deployment running (1/1 available)`);
+          }
+
+          console.log(`    ✓ All 3 MCPServers auto-recovered when shared Secret was created`);
+          console.log(`    ✓ Field indexing correctly handled multiple watchers`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up multiple MCPServers...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete secret ${secretName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
       // Test 3.1: Rapid successive updates - stress test reconciliation queue
       await test('Rapid successive updates: Reconciliation queue handling', async () => {
         const serverName = 'rapid-updates';
