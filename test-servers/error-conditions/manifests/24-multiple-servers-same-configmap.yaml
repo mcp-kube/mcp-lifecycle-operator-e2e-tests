@@ -1,0 +1,64 @@
+---
+# Test Case: Multiple MCPServers referencing same ConfigMap auto-recover
+# Scenario: 3 MCPServers reference same missing ConfigMap, create it once, all recover
+# Expected: All 3 MCPServers auto-recover when ConfigMap is created (field indexing test)
+# Why: Validates PR #93's field indexing correctly tracks multiple watchers
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: multi-server-1
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /shared
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: shared-configmap
+---
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: multi-server-2
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /shared
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: shared-configmap
+---
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: multi-server-3
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /shared
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: shared-configmap

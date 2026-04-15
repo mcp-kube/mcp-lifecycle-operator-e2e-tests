@@ -240,6 +240,19 @@ Indicates overall server operational status.
    - Validates: Standard K8s behavior (no cascade delete)
    - Introduced in PR #93 to solve issue #92
 
+27. **Multiple MCPServers same ConfigMap** - Field indexing handles multiple watchers correctly
+   - Create 3 MCPServers all referencing same missing ConfigMap
+   - All 3 should be in error state (Accepted=False, Invalid)
+   - Capture initial generations for all 3
+   - Create the shared ConfigMap once
+   - Expected: All 3 MCPServers auto-recover (Accepted=True → Ready=True)
+   - Expected: Generation unchanged for all 3 (all watch-triggered)
+   - Expected: All 3 Deployments running
+   - Validates: Field indexing correctly tracks multiple watchers
+   - Validates: Single ConfigMap event triggers reconciliation for all referencing MCPServers
+   - Validates: PR #93's `extractConfigMapNames` field indexer works correctly
+   - Introduced in PR #93 to solve issue #92
+
 ## Implementation Details
 
 ### Manifests
@@ -268,6 +281,7 @@ Each test case has a dedicated manifest file in `manifests/`:
 - `21-recovery-bad-image.yaml` (legacy numbering)
 - `22-configmap-update-watch.yaml`
 - `23-configmap-delete-watch.yaml`
+- `24-multiple-servers-same-configmap.yaml`
 - `23-observedgeneration-consistency.yaml`
 - `24-initializing-state-capture.yaml`
 

@@ -934,6 +934,101 @@ data:
         }
       });
 
+      // Test 5: Multiple MCPServers referencing same ConfigMap - field indexing test
+      await test('Multiple MCPServers referencing same ConfigMap auto-recover', async () => {
+        const serverNames = ['multi-server-1', 'multi-server-2', 'multi-server-3'];
+        const configMapName = 'shared-configmap';
+        const manifestPath = path.join(manifestsDir, '24-multiple-servers-same-configmap.yaml');
+
+        try {
+          console.log(`    Testing multiple MCPServers with shared ConfigMap...`);
+
+          // Step 1: Create 3 MCPServers (ConfigMap doesn't exist yet)
+          console.log(`    [1/8] Creating 3 MCPServers (ConfigMap missing)...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for all to be in error state
+          console.log(`    [2/8] Waiting for all MCPServers to reach error state...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 10);
+            console.log(`    ✓ ${serverName}: Accepted=False, Invalid`);
+          }
+
+          // Step 3: Capture initial generations
+          console.log(`    [3/8] Capturing initial generations...`);
+          const initialGenerations: { [key: string]: number } = {};
+          for (const serverName of serverNames) {
+            const serverJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+            const server = JSON.parse(serverJson.stdout);
+            initialGenerations[serverName] = server.metadata.generation;
+            console.log(`    ${serverName}: generation=${initialGenerations[serverName]}`);
+          }
+
+          // Step 4: Create the shared ConfigMap (should trigger all watches)
+          console.log(`    [4/8] Creating shared ConfigMap (should trigger all 3 watches)...`);
+          console.log(`    (ConfigMap watch should trigger reconciliation for all - PR #93)`);
+          const configMapYaml = `
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${configMapName}
+  namespace: ${namespace}
+data:
+  shared.txt: "shared data"
+`;
+          const configMapFile = `/tmp/${configMapName}.yaml`;
+          fs.writeFileSync(configMapFile, configMapYaml);
+          await execAsync(`kubectl apply -f ${configMapFile}`);
+
+          // Step 5: Wait for all MCPServers to auto-recover (Accepted=True)
+          console.log(`    [5/8] Waiting for all MCPServers to auto-recover (Accepted=True)...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+            console.log(`    ✓ ${serverName}: Accepted=True, Valid`);
+          }
+
+          // Step 6: Wait for all MCPServers to become Ready
+          console.log(`    [6/8] Waiting for all MCPServers to become Ready...`);
+          for (const serverName of serverNames) {
+            await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 60);
+            console.log(`    ✓ ${serverName}: Ready=True, Available`);
+          }
+
+          // Step 7: Verify generation did NOT change for any MCPServer
+          console.log(`    [7/8] Verifying all generations unchanged...`);
+          for (const serverName of serverNames) {
+            const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+            const finalServer = JSON.parse(finalServerJson.stdout);
+            const finalGeneration = finalServer.metadata.generation;
+
+            test.assertEqual(
+              finalGeneration,
+              initialGenerations[serverName],
+              `${serverName} generation should not change (was ${initialGenerations[serverName]}, now ${finalGeneration})`
+            );
+            console.log(`    ✓ ${serverName}: generation unchanged (${finalGeneration})`);
+          }
+
+          // Step 8: Verify all 3 MCPServers are running
+          console.log(`    [8/8] Verifying all Deployments are running...`);
+          for (const serverName of serverNames) {
+            const deploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
+            const deployment = JSON.parse(deploymentJson.stdout);
+            test.assert(deployment.status.availableReplicas === 1, `${serverName} should have 1 available replica`);
+            console.log(`    ✓ ${serverName}: Deployment running (1/1 available)`);
+          }
+
+          console.log(`    ✓ All 3 MCPServers auto-recovered when shared ConfigMap was created`);
+          console.log(`    ✓ Field indexing correctly handled multiple watchers`);
+        } finally {
+          // Cleanup
+          console.log(`    Cleaning up multiple MCPServers...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
       // Test 3.1: Rapid successive updates - stress test reconciliation queue
       await test('Rapid successive updates: Reconciliation queue handling', async () => {
         const serverName = 'rapid-updates';
