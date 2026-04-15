@@ -463,8 +463,16 @@ async function main() {
             `Accepted message should mention ConfigMap name: ${initialAcceptedCondition.message}`
           );
 
+          // Capture initial generation (before creating ConfigMap)
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
           // Step 3: Create the missing ConfigMap
+          // PR #93: ConfigMap watch should automatically trigger reconciliation (no spec update needed)
           console.log(`    [3/6] Creating missing ConfigMap ${configMapName}...`);
+          console.log(`    (ConfigMap watch should trigger automatic reconciliation - PR #93)`);
           const configMapYaml = `
 apiVersion: v1
 kind: ConfigMap
@@ -478,27 +486,9 @@ data:
           fs.writeFileSync(configMapFile, configMapYaml);
           await execAsync(`kubectl apply -f ${configMapFile}`);
 
-          // Trigger reconciliation by updating the MCPServer spec (bump generation)
-          // We add a harmless environment variable to trigger reconciliation
-          console.log(`    Triggering reconciliation by updating MCPServer spec...`);
-          const patchJson = {
-            spec: {
-              config: {
-                env: [
-                  {
-                    name: 'RECOVERY_TRIGGER',
-                    value: new Date().getTime().toString()
-                  }
-                ]
-              }
-            }
-          };
-          await execAsync(
-            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
-          );
-
           // Step 4: Wait for Accepted=True, Valid
-          console.log(`    [4/6] Waiting for Accepted=True, Valid...`);
+          // Auto-recovery via ConfigMap watch (no manual spec update needed)
+          console.log(`    [4/6] Waiting for Accepted=True, Valid (auto-recovery)...`);
           await k8s.waitForCondition(
             serverName,
             'Accepted',
@@ -550,12 +540,26 @@ data:
           );
           console.log(`    Ready lastTransitionTime changed: ${initialReadyTransitionTime} → ${recoveredReadyCondition.lastTransitionTime}`);
 
-          // Step 6: Verify observedGeneration is set
-          console.log(`    [6/6] Verifying status fields...`);
-          const observedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
-          test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
+          // Step 6: Verify generation did NOT change (auto-recovery doesn't modify spec)
+          console.log(`    [6/6] Verifying generation unchanged (validates auto-recovery)...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+          const observedGeneration = finalServer.status.observedGeneration;
 
-          console.log(`    ✓ Recovery successful: Accepted=True, Ready=True`);
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation should NOT change during auto-recovery (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          test.assertEqual(
+            observedGeneration,
+            finalGeneration,
+            `observedGeneration should match generation (both should be ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration} (confirms auto-recovery via ConfigMap watch)`);
+
+          console.log(`    ✓ Recovery successful: Accepted=True, Ready=True (via automatic reconciliation)`);
         } finally {
           // Cleanup
           console.log(`    Cleaning up ${serverName}...`);
@@ -607,8 +611,16 @@ data:
             `Accepted message should mention Secret name: ${initialAcceptedCondition.message}`
           );
 
+          // Capture initial generation (before creating Secret)
+          const initialServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const initialServer = JSON.parse(initialServerJson.stdout);
+          const initialGeneration = initialServer.metadata.generation;
+          console.log(`    Initial generation: ${initialGeneration}`);
+
           // Step 3: Create the missing Secret
+          // PR #93: Secret watch should automatically trigger reconciliation (no spec update needed)
           console.log(`    [3/6] Creating missing Secret ${secretName}...`);
+          console.log(`    (Secret watch should trigger automatic reconciliation - PR #93)`);
           const secretYaml = `
 apiVersion: v1
 kind: Secret
@@ -623,27 +635,9 @@ data:
           fs.writeFileSync(secretFile, secretYaml);
           await execAsync(`kubectl apply -f ${secretFile}`);
 
-          // Trigger reconciliation by updating the MCPServer spec (bump generation)
-          // We add a harmless environment variable to trigger reconciliation
-          console.log(`    Triggering reconciliation by updating MCPServer spec...`);
-          const patchJson = {
-            spec: {
-              config: {
-                env: [
-                  {
-                    name: 'RECOVERY_TRIGGER',
-                    value: new Date().getTime().toString()
-                  }
-                ]
-              }
-            }
-          };
-          await execAsync(
-            `kubectl patch mcpserver ${serverName} -n ${namespace} --type=merge -p '${JSON.stringify(patchJson)}'`
-          );
-
           // Step 4: Wait for Accepted=True, Valid
-          console.log(`    [4/6] Waiting for Accepted=True, Valid...`);
+          // Auto-recovery via Secret watch (no manual spec update needed)
+          console.log(`    [4/6] Waiting for Accepted=True, Valid (auto-recovery)...`);
           await k8s.waitForCondition(
             serverName,
             'Accepted',
@@ -695,12 +689,26 @@ data:
           );
           console.log(`    Ready lastTransitionTime changed: ${initialReadyTransitionTime} → ${recoveredReadyCondition.lastTransitionTime}`);
 
-          // Step 6: Verify observedGeneration is set
-          console.log(`    [6/6] Verifying status fields...`);
-          const observedGeneration = await k8s.getMCPServerObservedGeneration(serverName, namespace);
-          test.assert(observedGeneration > 0, 'observedGeneration should be greater than 0');
+          // Step 6: Verify generation did NOT change (auto-recovery doesn't modify spec)
+          console.log(`    [6/6] Verifying generation unchanged (validates auto-recovery)...`);
+          const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
+          const finalServer = JSON.parse(finalServerJson.stdout);
+          const finalGeneration = finalServer.metadata.generation;
+          const observedGeneration = finalServer.status.observedGeneration;
 
-          console.log(`    ✓ Recovery successful: Accepted=True, Ready=True`);
+          test.assertEqual(
+            finalGeneration,
+            initialGeneration,
+            `Generation should NOT change during auto-recovery (was ${initialGeneration}, now ${finalGeneration})`
+          );
+          test.assertEqual(
+            observedGeneration,
+            finalGeneration,
+            `observedGeneration should match generation (both should be ${finalGeneration})`
+          );
+          console.log(`    ✓ Generation unchanged: ${finalGeneration} (confirms auto-recovery via Secret watch)`);
+
+          console.log(`    ✓ Recovery successful: Accepted=True, Ready=True (via automatic reconciliation)`);
         } finally {
           // Cleanup
           console.log(`    Cleaning up ${serverName}...`);
