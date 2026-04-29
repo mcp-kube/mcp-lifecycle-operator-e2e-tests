@@ -181,51 +181,6 @@ KEEP_CLUSTER=true KEEP_FAILED_SERVERS=true ./scripts/run-e2e.sh
 SERVER_READY_TIMEOUT=600 ./scripts/run-e2e.sh
 ```
 
-## Directory Structure
-
-```
-.
-├── cluster/
-│   ├── kind-config.yaml          # Kind cluster configuration
-│   └── setup.sh                  # Cluster setup script
-├── scripts/
-│   ├── deploy-operator.sh        # Deploy operator from source
-│   ├── build-test-images.sh      # Build custom test server images
-│   ├── test-server.sh            # Deploy, test, cleanup single server
-│   ├── run-e2e.sh                # Main orchestration script
-│   └── cleanup.sh                # Cleanup resources
-├── test-servers/
-│   ├── kubernetes-mcp-server/    # Kubernetes MCP server tests
-│   │   ├── manifest.yaml         # MCPServer CRD
-│   │   ├── test.ts               # TypeScript tests
-│   │   └── README.md             # Server documentation
-│   ├── operator-features/        # Operator features validation tests
-│   │   ├── server/               # Custom MCP server for testing
-│   │   ├── manifest.yaml         # MCPServer CRD with operator features
-│   │   ├── test.ts               # TypeScript tests
-│   │   └── README.md             # Server documentation
-│   └── template/                 # Template for new servers
-├── framework/
-│   ├── src/
-│   │   ├── mcp-client.ts         # MCP client library
-│   │   ├── k8s-utils.ts          # Kubernetes utilities
-│   │   ├── test-framework.ts     # Test framework
-│   │   ├── types.ts              # Shared types
-│   │   └── index.ts              # Main exports
-│   ├── package.json
-│   └── tsconfig.json
-├── logs/                         # Test logs (created at runtime)
-├── README.md                     # This file
-└── PLANNING.md                   # Detailed planning document
-```
-
-## Test Servers
-
-The framework includes two types of test servers:
-
-1. **kubernetes-mcp-server** - Tests the official Kubernetes MCP server from Docker Hub
-2. **operator-features** - Tests operator-specific features using a custom MCP server built locally
-
 ### Custom Test Server Images
 
 Some tests (like `operator-features`) include a custom MCP server in a `server/` directory. The framework automatically:
