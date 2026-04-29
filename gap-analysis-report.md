@@ -37,12 +37,11 @@ The following areas have good or complete coverage:
 
 These are controller behavioral features introduced by recent PRs that are not yet covered by e2e tests. They don't necessarily correspond to new CRD fields, but to new controller logic.
 
-### B1. Default TCP Readiness Probe Injection (PR #111, issue #110)
+### ~~B1. Default TCP Readiness Probe Injection (PR #111, issue #110)~~ -- COVERED
 
 **Merged:** 2026-04-28
-**Behavior:** When no custom readiness probe is specified in `spec.runtime.health`, the controller injects a default TCP socket readiness probe targeting the configured `spec.config.port`. A TCP probe is used (not HTTP GET) because the MCP Streamable HTTP spec only requires POST support.
-**What to test:** Deploy an MCPServer without any readiness probe and verify the pod gets a TCP readiness probe on the configured port. Verify the pod becomes Ready.
-**Testability:** High
+**Covered by:** `test-servers/behavioral-features/` (test `01-default-tcp-readiness-probe`)
+**Verifies:** Controller injects tcpSocket readiness probe targeting `spec.config.port` when no custom probe is specified. Also verifies MCPServer reaches `Ready=True, Available`.
 
 ### B2. MCP Protocol Handshake Validation (PR #111, issue #110)
 
@@ -256,7 +255,7 @@ These open issues in the operator repository may introduce new features that wil
 Based on testability and coverage impact, the recommended implementation order is:
 
 ### High Priority -- Behavioral Features (new controller logic, easy to test)
-1. **B1.** Default TCP readiness probe injection (no custom probe specified)
+1. ~~**B1.** Default TCP readiness probe injection (no custom probe specified)~~ -- DONE
 2. **B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason
 3. **B3.** Config-hash rolling update on Secret/ConfigMap data change
 4. **B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)

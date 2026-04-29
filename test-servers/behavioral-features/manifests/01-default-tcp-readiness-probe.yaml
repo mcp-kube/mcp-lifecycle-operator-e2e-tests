@@ -1,0 +1,20 @@
+---
+# Test Case: Default TCP readiness probe injection (PR #111)
+# Scenario: MCPServer without custom health probes should get a default TCP readiness probe
+# Expected: Controller injects tcpSocket readiness probe targeting spec.config.port
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: default-tcp-readiness-probe
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: aliok/mcp-server-streamable-http:latest
+  config:
+    port: 8081
+  runtime:
+    security:
+      securityContext:
+        runAsNonRoot: false
