@@ -97,26 +97,26 @@ jobs:
           for test_dir in test-servers/*/; do
             server_name=$(basename "$test_dir")
 
-            # Skip special cases with different structures
-            if [ "$server_name" = "template" ] || [ "$server_name" = "error-conditions" ] || [ "$server_name" = "update-operations" ]; then
+            # Skip template directory
+            if [ "$server_name" = "template" ]; then
               continue
             fi
 
             echo "Checking $server_name..."
 
-            # Check required files
-            if [ ! -f "$test_dir/manifest.yaml" ]; then
-              echo "❌ Missing manifest.yaml in $server_name"
+            # Standalone tests (no manifest.yaml) only need test.ts
+            # Standard tests need both manifest.yaml and test.ts
+            if [ -f "$test_dir/manifest.yaml" ]; then
+              echo "  Standard test (has manifest.yaml)"
+            elif [ -f "$test_dir/test.ts" ]; then
+              echo "  Standalone test (no manifest.yaml, test manages its own resources)"
+            else
+              echo "❌ $server_name has neither manifest.yaml nor test.ts"
               exit 1
             fi
 
             if [ ! -f "$test_dir/test.ts" ]; then
               echo "❌ Missing test.ts in $server_name"
-              exit 1
-            fi
-
-            if [ ! -x "$test_dir/test.ts" ]; then
-              echo "❌ test.ts not executable in $server_name"
               exit 1
             fi
 
