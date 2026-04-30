@@ -20,14 +20,14 @@ The following areas have good or complete coverage:
 | **Source**               | `type: ContainerImage`, `containerImage.ref`                                                                                               |
 | **Config**               | `port`, `path` (custom), `arguments`                                                                                                       |
 | **Env (value)**          | Plain `value`                                                                                                                              |
-| **Env (valueFrom)**      | `secretKeyRef`, `configMapKeyRef`, `fieldRef` (5 field paths), `resourceFieldRef` (4 resources)                                            |
+| **Env (valueFrom)**      | `secretKeyRef` (incl. `optional`), `configMapKeyRef` (incl. `optional`), `fieldRef` (5 field paths), `resourceFieldRef` (4 resources + `divisor`) |
 | **EnvFrom**              | `secretRef`, `configMapRef`, with and without `prefix`, `optional` flag                                                                    |
 | **Storage types**        | `ConfigMap`, `Secret`, `EmptyDir` (default, Memory medium, sizeLimit)                                                                      |
-| **Storage options**      | `defaultMode`, `items` (key projection), `optional`, `ReadOnly`/`ReadWrite` permissions                                                    |
+| **Storage options**      | `defaultMode`, `items` (key projection + per-item `mode`), `optional`, `ReadOnly`/`ReadWrite`/`RecursiveReadOnly` permissions                |
 | **Runtime**              | `replicas` (0, 1, 2, 3), `resources` (requests + limits for cpu/memory)                                                                    |
-| **Health**               | `livenessProbe` and `readinessProbe` via `httpGet` with all timing fields                                                                  |
-| **Security (pod)**       | `runAsUser`, `runAsGroup`, `fsGroup`, `runAsNonRoot`, `seccompProfile.type: RuntimeDefault`                                                |
-| **Security (container)** | `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities.drop`                                                                  |
+| **Health**               | `livenessProbe` and `readinessProbe` via `httpGet`, `exec`, `tcpSocket` with all timing fields                                              |
+| **Security (pod)**       | `runAsUser`, `runAsGroup`, `fsGroup`, `runAsNonRoot`, `supplementalGroups`, `seccompProfile.type: RuntimeDefault`                           |
+| **Security (container)** | `runAsUser`, `runAsGroup`, `runAsNonRoot` (overrides), `readOnlyRootFilesystem`, `allowPrivilegeEscalation`, `capabilities.drop`             |
 | **Security (other)**     | `serviceAccountName`                                                                                                                       |
 | **Status**               | `conditions` (Accepted/Ready with all reasons), `observedGeneration`, `deploymentName`, `serviceName`, `address.url`, `lastTransitionTime` |
 
@@ -247,14 +247,14 @@ Based on testability and coverage impact, the recommended implementation order i
 4. ~~**B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)~~ -- DONE
 
 ### High Priority -- CRD Fields (easy to test, meaningful coverage)
-5. `RecursiveReadOnly` storage permission
-6. `exec` health probe type
-7. `tcpSocket` health probe type
-8. Container-level `runAsUser` / `runAsGroup` / `runAsNonRoot` overrides
-9. `supplementalGroups` in pod security context
-10. `secretKeyRef.optional` / `configMapKeyRef.optional` on env vars
-11. `resourceFieldRef.divisor`
-12. Item-level `mode` on storage projections
+5. ~~`RecursiveReadOnly` storage permission~~ -- DONE
+6. ~~`exec` health probe type~~ -- DONE
+7. ~~`tcpSocket` health probe type~~ -- DONE
+8. ~~Container-level `runAsUser` / `runAsGroup` / `runAsNonRoot` overrides~~ -- DONE
+9. ~~`supplementalGroups` in pod security context~~ -- DONE
+10. ~~`secretKeyRef.optional` / `configMapKeyRef.optional` on env vars~~ -- DONE
+11. ~~`resourceFieldRef.divisor`~~ -- DONE
+12. ~~Item-level `mode` on storage projections~~ -- DONE
 
 ### Medium Priority (testable with some caveats)
 13. ~~Prometheus metrics verification (B5)~~ -- DONE
