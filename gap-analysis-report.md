@@ -77,145 +77,120 @@ These are controller behavioral features introduced by recent PRs that are not y
 **Covered by:** `test-servers/behavioral-features/` (tests `06-env-valuefrom-missing-secret`, `06-env-valuefrom-missing-configmap`, `06-env-valuefrom-optional-secret`)
 **Verifies:** Missing `secretKeyRef` reference causes `Accepted=False, Invalid` with message mentioning secret name and "env var". Missing `configMapKeyRef` reference causes `Accepted=False, Invalid` with message mentioning configmap name and "env var". `optional: true` on `secretKeyRef` skips validation and allows `Accepted=True, Valid` despite missing Secret.
 
-### B7. Transient vs Permanent Error Distinction (PR #107, issue #86)
+### ~~B7. Transient vs Permanent Error Distinction (PR #107, issue #86)~~ -- EXCLUDED
 
 **Merged:** 2026-04-23
 **Behavior:** Transient API errors (network timeouts, server errors) during validation no longer flip `Accepted` to `False`. Only permanent configuration errors (missing ConfigMap/Secret that the API confirms doesn't exist) set `Accepted=False`. Transient errors trigger requeue without status changes.
-**What to test:** Difficult to test in e2e (requires simulating API server errors). The behavior is implicitly validated by existing tests that confirm Accepted doesn't flicker.
-**Testability:** Low (for e2e)
+**Excluded:** Requires simulating API server errors (fault injection), not feasible in Kind e2e. See `excluded-tests.md`.
 
 ---
 
 ## Gaps: CRD Field Coverage
 
-### 1. Storage: `RecursiveReadOnly` Permission
+### ~~1. Storage: `RecursiveReadOnly` Permission~~ -- COVERED
 
 **CRD field:** `spec.config.storage[].permissions`
-**Enum values:** `ReadOnly`, `ReadWrite`, `RecursiveReadOnly`
-**What's missing:** Only `ReadOnly` and `ReadWrite` are tested. `RecursiveReadOnly` (mount and all submounts are recursively read-only) is not exercised.
-**Testability:** High -- add a storage mount with `permissions: RecursiveReadOnly` and verify the mount and any subdirectories are read-only.
+**Covered by:** `test-servers/behavioral-features/` (test `07-recursive-readonly-storage`)
 
-### 2. Storage: Item-Level File Mode
+### ~~2. Storage: Item-Level File Mode~~ -- COVERED
 
 **CRD field:** `spec.config.storage[].source.configMap.items[].mode` and `spec.config.storage[].source.secret.items[].mode`
-**What's missing:** Volume-level `defaultMode` is tested, but per-item `mode` overrides on individual key projections are not.
-**Testability:** High -- add `mode` to existing item projections and verify individual file permissions differ from the volume default.
+**Covered by:** `test-servers/operator-features/` (per-item mode tests on `/secret-item-mode` and `/configmap-item-mode`)
 
-### 3. Health Probes: `exec` Type
+### ~~3. Health Probes: `exec` Type~~ -- COVERED
 
 **CRD field:** `spec.runtime.health.livenessProbe.exec` / `spec.runtime.health.readinessProbe.exec`
-**What's missing:** Only `httpGet` probes are tested. Command-based `exec` probes (`command: [...]`) are not exercised.
-**Testability:** High -- configure an exec probe that runs a command (e.g., `cat /tmp/healthy`) and verify the pod stays running.
+**Covered by:** `test-servers/behavioral-features/` (test `08-exec-health-probe`)
 
-### 4. Health Probes: `tcpSocket` Type
+### ~~4. Health Probes: `tcpSocket` Type~~ -- COVERED
 
 **CRD field:** `spec.runtime.health.livenessProbe.tcpSocket` / `spec.runtime.health.readinessProbe.tcpSocket`
-**What's missing:** TCP socket-based health checks (`port`, `host`) are not tested.
-**Testability:** High -- configure a tcpSocket probe targeting the MCP server's port and verify pod health.
+**Covered by:** `test-servers/behavioral-features/` (test `09-explicit-tcp-health-probe`)
 
-### 5. Health Probes: `grpc` Type
+### ~~5. Health Probes: `grpc` Type~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.health.livenessProbe.grpc` / `spec.runtime.health.readinessProbe.grpc`
-**What's missing:** gRPC-based health checks (`port`, `service`) are not tested.
-**Testability:** Low -- requires the test server to implement the gRPC health checking protocol.
+**Excluded:** Requires gRPC health checking protocol in test server. See `excluded-tests.md`.
 
-### 6. Health Probes: `terminationGracePeriodSeconds`
+### ~~6. Health Probes: `terminationGracePeriodSeconds`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.health.livenessProbe.terminationGracePeriodSeconds` / `spec.runtime.health.readinessProbe.terminationGracePeriodSeconds`
-**What's missing:** Per-probe override of the pod's termination grace period is not tested.
-**Testability:** Medium -- can be configured but difficult to verify behaviorally without inducing probe failures.
+**Excluded:** Timing-based verification is inherently flaky. See `excluded-tests.md`.
 
-### 7. Security: `podSecurityContext.supplementalGroups`
+### ~~7. Security: `podSecurityContext.supplementalGroups`~~ -- COVERED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.supplementalGroups`
-**What's missing:** Additional group IDs for the pod's processes are not tested.
-**Testability:** High -- set `supplementalGroups: [4000, 5000]` and verify via the `check_user_id` tool that the process has those group memberships.
+**Covered by:** `test-servers/operator-features/` (supplementalGroups test verifying groups 4000, 5000)
 
-### 8. Security: `podSecurityContext.fsGroupChangePolicy`
+### ~~8. Security: `podSecurityContext.fsGroupChangePolicy`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.fsGroupChangePolicy`
-**Enum values:** `OnRootMismatch`, `Always`
-**What's missing:** The policy controlling when fsGroup ownership is applied to volumes is not tested.
-**Testability:** Medium -- can be configured, but behavioral verification (whether ownership is actually changed) depends on volume state.
+**Excluded:** Both policies produce identical results with fresh mounts. See `excluded-tests.md`.
 
-### 9. Security: `podSecurityContext.seLinuxOptions`
+### ~~9. Security: `podSecurityContext.seLinuxOptions`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.seLinuxOptions` (user, role, type, level)
-**What's missing:** SELinux label configuration is not tested.
-**Testability:** Low -- requires an SELinux-enabled cluster (not available on most test environments).
+**Excluded:** Requires SELinux-enabled cluster. See `excluded-tests.md`.
 
-### 10. Security: `podSecurityContext.appArmorProfile`
+### ~~10. Security: `podSecurityContext.appArmorProfile`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.appArmorProfile` (type, localhostProfile)
-**What's missing:** AppArmor profile configuration at the pod level is not tested.
-**Testability:** Low -- requires an AppArmor-enabled node.
+**Excluded:** Requires AppArmor-enabled node. See `excluded-tests.md`.
 
-### 11. Security: `podSecurityContext.sysctls`
+### ~~11. Security: `podSecurityContext.sysctls`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.sysctls` (name, value)
-**What's missing:** Kernel parameter tuning via sysctls is not tested.
-**Testability:** Low -- requires allowed sysctls in the cluster's PodSecurityPolicy/Standards configuration.
+**Excluded:** Requires allowed sysctls in cluster configuration. See `excluded-tests.md`.
 
-### 12. Security: `podSecurityContext.supplementalGroupsPolicy`
+### ~~12. Security: `podSecurityContext.supplementalGroupsPolicy`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.podSecurityContext.supplementalGroupsPolicy`
-**Enum values:** `Merge`, `Strict`
-**What's missing:** Policy for how supplemental groups are computed is not tested.
-**Testability:** Medium -- requires Kubernetes 1.31+ and verification of group membership behavior.
+**Excluded:** Requires container image with custom groups to observe difference. See `excluded-tests.md`.
 
-### 13. Security: Container-Level `runAsUser` / `runAsGroup` / `runAsNonRoot`
+### ~~13. Security: Container-Level `runAsUser` / `runAsGroup` / `runAsNonRoot`~~ -- COVERED
 
 **CRD field:** `spec.runtime.security.securityContext.runAsUser`, `.runAsGroup`, `.runAsNonRoot`
-**What's missing:** These fields are only tested at the pod level (`podSecurityContext`). Container-level overrides are not exercised.
-**Testability:** High -- set container-level values that differ from pod-level values and verify the container runs with the container-level settings.
+**Covered by:** `test-servers/behavioral-features/` (test `10-container-security-override`)
 
-### 14. Security: `securityContext.privileged`
+### ~~14. Security: `securityContext.privileged`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.securityContext.privileged`
-**What's missing:** Privileged container mode is not tested.
-**Testability:** Medium -- can be set to `false` (explicit) and verified, but `true` may be restricted by cluster policy.
+**Excluded:** `true` is blocked by cluster policy; `false` is already the default. See `excluded-tests.md`.
 
-### 15. Security: `securityContext.procMount`
+### ~~15. Security: `securityContext.procMount`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.securityContext.procMount`
-**What's missing:** Process mount type configuration is not tested.
-**Testability:** Low -- limited practical use cases and requires specific cluster configuration.
+**Excluded:** No observable behavioral difference from MCP server perspective. See `excluded-tests.md`.
 
-### 16. Security: Container-Level `seccompProfile`
+### ~~16. Security: Container-Level `seccompProfile`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.securityContext.seccompProfile` (type, localhostProfile)
-**What's missing:** Only pod-level `seccompProfile` is tested. Container-level override is not exercised.
-**Testability:** Medium -- can set a different profile at the container level and verify it takes effect.
+**Excluded:** Override pattern already verified by container-level runAsUser/runAsGroup test. See `excluded-tests.md`.
 
-### 17. Security: Container-Level `appArmorProfile`
+### ~~17. Security: Container-Level `appArmorProfile`~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.security.securityContext.appArmorProfile` (type, localhostProfile)
-**What's missing:** AppArmor profile at the container level is not tested.
-**Testability:** Low -- requires AppArmor-enabled nodes.
+**Excluded:** Requires AppArmor-enabled nodes. See `excluded-tests.md`.
 
-### 18. Env: `secretKeyRef.optional` / `configMapKeyRef.optional`
+### ~~18. Env: `secretKeyRef.optional` / `configMapKeyRef.optional`~~ -- COVERED
 
 **CRD field:** `spec.config.env[].valueFrom.secretKeyRef.optional` and `spec.config.env[].valueFrom.configMapKeyRef.optional`
-**What's missing:** The `optional` flag on individual env var key references is tested for `envFrom` and storage but not for individual `env[].valueFrom` references.
-**Testability:** High -- reference a non-existent ConfigMap/Secret key with `optional: true` and verify the pod starts successfully without that env var.
+**Covered by:** `test-servers/operator-features/` (optional secretKeyRef/configMapKeyRef env var tests)
 
-### 19. Env: `resourceFieldRef.divisor`
+### ~~19. Env: `resourceFieldRef.divisor`~~ -- COVERED
 
 **CRD field:** `spec.config.env[].valueFrom.resourceFieldRef.divisor`
-**What's missing:** Custom divisor for resource field references (e.g., expressing memory in MiB instead of bytes) is not tested.
-**Testability:** High -- set `divisor: "1Mi"` on a memory resourceFieldRef and verify the env var contains the value in MiB.
+**Covered by:** `test-servers/operator-features/` (divisor 1Mi test verifying value is "128")
 
-### 20. Env: `resourceFieldRef.containerName`
+### ~~20. Env: `resourceFieldRef.containerName`~~ -- EXCLUDED
 
 **CRD field:** `spec.config.env[].valueFrom.resourceFieldRef.containerName`
-**What's missing:** Explicit container name targeting for resource field references is not tested.
-**Testability:** Medium -- useful primarily in multi-container pods; may not apply to single-container MCPServer pods.
+**Excluded:** Only relevant for multi-container pods; MCPServer is single-container. See `excluded-tests.md`.
 
-### 21. Resources: `claims` (Dynamic Resource Allocation)
+### ~~21. Resources: `claims` (Dynamic Resource Allocation)~~ -- EXCLUDED
 
 **CRD field:** `spec.runtime.resources.claims` (name, request)
-**What's missing:** DRA resource claims are not tested.
-**Testability:** Low -- requires DRA-enabled cluster with resource drivers installed. This is a relatively new and uncommon feature.
+**Excluded:** Requires DRA-enabled cluster with resource drivers. See `excluded-tests.md`.
 
 ---
 
@@ -258,17 +233,19 @@ Based on testability and coverage impact, the recommended implementation order i
 
 ### Medium Priority (testable with some caveats)
 13. ~~Prometheus metrics verification (B5)~~ -- DONE
-14. `fsGroupChangePolicy`
-15. `supplementalGroupsPolicy`
-16. `terminationGracePeriodSeconds` on probes
-17. Container-level `seccompProfile`
-18. `privileged: false` (explicit)
+14. ~~`fsGroupChangePolicy`~~ -- EXCLUDED
+15. ~~`supplementalGroupsPolicy`~~ -- EXCLUDED
+16. ~~`terminationGracePeriodSeconds` on probes~~ -- EXCLUDED
+17. ~~Container-level `seccompProfile`~~ -- EXCLUDED
+18. ~~`privileged: false` (explicit)~~ -- EXCLUDED
 
 ### Low Priority (environment-dependent or limited value)
-19. `grpc` health probe type
-20. `seLinuxOptions`
-21. `appArmorProfile` (pod and container level)
-22. `sysctls`
-23. `procMount`
-24. `resourceFieldRef.containerName`
-25. `resources.claims` (DRA)
+19. ~~`grpc` health probe type~~ -- EXCLUDED
+20. ~~`seLinuxOptions`~~ -- EXCLUDED
+21. ~~`appArmorProfile` (pod and container level)~~ -- EXCLUDED
+22. ~~`sysctls`~~ -- EXCLUDED
+23. ~~`procMount`~~ -- EXCLUDED
+24. ~~`resourceFieldRef.containerName`~~ -- EXCLUDED
+25. ~~`resources.claims` (DRA)~~ -- EXCLUDED
+
+See `excluded-tests.md` for detailed rationale on each excluded item.
