@@ -718,8 +718,8 @@ data:
         }
       });
 
-      // Test 3: ConfigMap UPDATE watch - reconciliation without Deployment update
-      await test('ConfigMap update triggers reconciliation (no Deployment update)', async () => {
+      // Test 3: ConfigMap UPDATE watch - reconciliation triggers rolling update via config-hash (PR #93, #140)
+      await test('ConfigMap update triggers reconciliation and rolling update (PR #93, #140)', async () => {
         const serverName = 'configmap-update-watch';
         const configMapName = 'test-update-configmap';
         const manifestPath = path.join(manifestsDir, '22-configmap-update-watch.yaml');
@@ -759,19 +759,20 @@ data:
 
           const initialDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
           const initialDeployment = JSON.parse(initialDeploymentJson.stdout);
-          const initialResourceVersion = initialDeployment.metadata.resourceVersion;
-          console.log(`    Initial Deployment resourceVersion: ${initialResourceVersion}`);
+          const initialConfigHash = initialDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
+          console.log(`    Initial config-hash: ${initialConfigHash}`);
 
           // Step 5: Update ConfigMap content
           console.log(`    [5/8] Updating ConfigMap content...`);
           console.log(`    (ConfigMap watch should trigger reconciliation - PR #93)`);
+          console.log(`    (Config-hash rolling update should update Deployment - PR #140)`);
           await execAsync(`kubectl patch configmap ${configMapName} -n ${namespace} --type=merge -p '{"data":{"data.txt":"updated"}}'`);
 
-          // Wait a bit for watch to trigger and reconciliation to run
+          // Wait for watch to trigger, reconciliation to run, and Deployment to update
           await sleep(5000);
 
-          // Step 6: Verify generation unchanged
-          console.log(`    [6/8] Verifying generation unchanged...`);
+          // Step 6: Verify MCPServer generation unchanged (no spec change)
+          console.log(`    [6/8] Verifying MCPServer generation unchanged...`);
           const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
           const finalServer = JSON.parse(finalServerJson.stdout);
           const finalGeneration = finalServer.metadata.generation;
@@ -783,18 +784,17 @@ data:
           );
           console.log(`    ✓ Generation unchanged: ${finalGeneration}`);
 
-          // Step 7: Verify Deployment NOT updated (standard K8s behavior)
-          console.log(`    [7/8] Verifying Deployment NOT updated...`);
+          // Step 7: Verify Deployment updated via config-hash annotation (PR #140)
+          console.log(`    [7/8] Verifying Deployment updated (config-hash rolling update)...`);
           const finalDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
           const finalDeployment = JSON.parse(finalDeploymentJson.stdout);
-          const finalResourceVersion = finalDeployment.metadata.resourceVersion;
+          const finalConfigHash = finalDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
 
-          test.assertEqual(
-            finalResourceVersion,
-            initialResourceVersion,
-            `Deployment should NOT update (configMapRef by name, not content)`
+          test.assert(
+            initialConfigHash !== finalConfigHash,
+            `Config-hash should change when ConfigMap data changes (was ${initialConfigHash}, now ${finalConfigHash})`
           );
-          console.log(`    ✓ Deployment unchanged: resourceVersion=${finalResourceVersion}`);
+          console.log(`    ✓ Config-hash changed: ${initialConfigHash.substring(0, 16)}... → ${finalConfigHash.substring(0, 16)}...`);
 
           // Step 8: Verify Accepted=True (validation passes)
           console.log(`    [8/8] Verifying Accepted condition...`);
@@ -803,7 +803,7 @@ data:
           test.assertEqual(acceptedCondition.reason, 'Valid', 'Reason should be Valid');
           console.log(`    ✓ Accepted: status=True, reason=Valid`);
 
-          console.log(`    ✓ ConfigMap update triggered reconciliation (Deployment unchanged - standard K8s behavior)`);
+          console.log(`    ✓ ConfigMap update triggered reconciliation and rolling update via config-hash (PR #93, #140)`);
         } finally {
           // Cleanup
           console.log(`    Cleaning up ${serverName}...`);
@@ -1029,8 +1029,8 @@ data:
         }
       });
 
-      // Test 6: Secret UPDATE watch - reconciliation without Deployment update
-      await test('Secret update triggers reconciliation (no Deployment update)', async () => {
+      // Test 6: Secret UPDATE watch - reconciliation triggers rolling update via config-hash (PR #93, #140)
+      await test('Secret update triggers reconciliation and rolling update (PR #93, #140)', async () => {
         const serverName = 'secret-update-watch';
         const secretName = 'test-update-secret';
         const manifestPath = path.join(manifestsDir, '25-secret-update-watch.yaml');
@@ -1071,19 +1071,20 @@ data:
 
           const initialDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
           const initialDeployment = JSON.parse(initialDeploymentJson.stdout);
-          const initialResourceVersion = initialDeployment.metadata.resourceVersion;
-          console.log(`    Initial Deployment resourceVersion: ${initialResourceVersion}`);
+          const initialConfigHash = initialDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
+          console.log(`    Initial config-hash: ${initialConfigHash}`);
 
           // Step 5: Update Secret content
           console.log(`    [5/8] Updating Secret content...`);
           console.log(`    (Secret watch should trigger reconciliation - PR #93)`);
+          console.log(`    (Config-hash rolling update should update Deployment - PR #140)`);
           await execAsync(`kubectl patch secret ${secretName} -n ${namespace} --type=merge -p '{"data":{"data.txt":"${Buffer.from('updated').toString('base64')}"}}'`);
 
-          // Wait a bit for watch to trigger and reconciliation to run
+          // Wait for watch to trigger, reconciliation to run, and Deployment to update
           await sleep(5000);
 
-          // Step 6: Verify generation unchanged
-          console.log(`    [6/8] Verifying generation unchanged...`);
+          // Step 6: Verify MCPServer generation unchanged (no spec change)
+          console.log(`    [6/8] Verifying MCPServer generation unchanged...`);
           const finalServerJson = await execAsync(`kubectl get mcpserver ${serverName} -n ${namespace} -o json`);
           const finalServer = JSON.parse(finalServerJson.stdout);
           const finalGeneration = finalServer.metadata.generation;
@@ -1095,18 +1096,17 @@ data:
           );
           console.log(`    ✓ Generation unchanged: ${finalGeneration}`);
 
-          // Step 7: Verify Deployment NOT updated (standard K8s behavior)
-          console.log(`    [7/8] Verifying Deployment NOT updated...`);
+          // Step 7: Verify Deployment updated via config-hash annotation (PR #140)
+          console.log(`    [7/8] Verifying Deployment updated (config-hash rolling update)...`);
           const finalDeploymentJson = await execAsync(`kubectl get deployment ${serverName} -n ${namespace} -o json`);
           const finalDeployment = JSON.parse(finalDeploymentJson.stdout);
-          const finalResourceVersion = finalDeployment.metadata.resourceVersion;
+          const finalConfigHash = finalDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
 
-          test.assertEqual(
-            finalResourceVersion,
-            initialResourceVersion,
-            `Deployment should NOT update (secretRef by name, not content)`
+          test.assert(
+            initialConfigHash !== finalConfigHash,
+            `Config-hash should change when Secret data changes (was ${initialConfigHash}, now ${finalConfigHash})`
           );
-          console.log(`    ✓ Deployment unchanged: resourceVersion=${finalResourceVersion}`);
+          console.log(`    ✓ Config-hash changed: ${initialConfigHash.substring(0, 16)}... → ${finalConfigHash.substring(0, 16)}...`);
 
           // Step 8: Verify Accepted=True (validation passes)
           console.log(`    [8/8] Verifying Accepted condition...`);
@@ -1115,7 +1115,7 @@ data:
           test.assertEqual(acceptedCondition.reason, 'Valid', 'Reason should be Valid');
           console.log(`    ✓ Accepted: status=True, reason=Valid`);
 
-          console.log(`    ✓ Secret update triggered reconciliation (Deployment unchanged - standard K8s behavior)`);
+          console.log(`    ✓ Secret update triggered reconciliation and rolling update via config-hash (PR #93, #140)`);
         } finally {
           // Cleanup
           console.log(`    Cleaning up ${serverName}...`);

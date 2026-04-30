@@ -51,13 +51,13 @@ These are controller behavioral features introduced by recent PRs that are not y
 **What to test:** This is implicitly tested whenever a valid MCP server becomes Ready. Could explicitly test the failure case with a non-MCP HTTP server (e.g. nginx) to verify `MCPEndpointUnavailable` reason.
 **Testability:** High
 
-### B3. Config-Hash Rolling Update on Secret/ConfigMap Change (PR #140, issue #139, #95)
+### B3. Config-Hash Rolling Update on Secret/ConfigMap Change (PR #140, issue #139, #95) -- PARTIALLY COVERED
 
 **Merged:** 2026-04-29
 **Behavior:** The controller computes a SHA-256 hash of all referenced ConfigMap and Secret data and stores it as a pod template annotation (`mcp.x-k8s.io/config-hash`). When referenced data changes, the hash changes, the pod template changes, and Kubernetes performs a rolling update.
 **What to test:** Deploy an MCPServer referencing a ConfigMap/Secret, update the ConfigMap/Secret data, and verify that pods are rolled (new pods created with new hash annotation, old pods terminated).
 **Testability:** High
-**Note:** The `error-conditions` suite already tests ConfigMap/Secret watch-based re-reconciliation (tests 22-27), but does NOT test the config-hash rolling update mechanism specifically.
+**Partial coverage:** The `error-conditions` suite tests (ConfigMap/Secret update watch tests) now verify that the `mcp.x-k8s.io/config-hash` annotation changes when referenced ConfigMap/Secret data is updated. A dedicated test verifying the full rolling update (new pods created, old pods terminated) is still recommended.
 
 ### B4. Kubernetes Event Recording (PR #118, issue #109)
 
@@ -257,7 +257,7 @@ Based on testability and coverage impact, the recommended implementation order i
 ### High Priority -- Behavioral Features (new controller logic, easy to test)
 1. ~~**B1.** Default TCP readiness probe injection (no custom probe specified)~~ -- DONE
 2. **B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason
-3. **B3.** Config-hash rolling update on Secret/ConfigMap data change
+3. **B3.** Config-hash rolling update on Secret/ConfigMap data change (partially covered by error-conditions tests)
 4. **B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)
 
 ### High Priority -- CRD Fields (easy to test, meaningful coverage)
