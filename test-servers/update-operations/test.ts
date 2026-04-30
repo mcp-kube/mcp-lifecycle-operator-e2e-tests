@@ -344,13 +344,25 @@ async function main() {
             );
 
             // Verify Ready status maintained or recovered
+            // After a rolling update, the operator may briefly set Ready=False
+            // (MCPEndpointUnavailable) while new pods come up and the MCP handshake
+            // is re-verified (PR #111). Wait for the final expected state.
             console.log(`    [5/5] Verifying Ready status...`);
-            const finalCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
-            console.log(
-              `    Final Ready: status=${finalCondition.status}, reason=${finalCondition.reason}, message="${finalCondition.message}"`
-            );
 
             if (testCase.expectedBehavior.maintainsReady) {
+              const expectedReason = testCase.expectedBehavior.expectedReadyReason || 'Available';
+              await k8s.waitForCondition(
+                serverName,
+                'Ready',
+                'True',
+                expectedReason,
+                namespace,
+                120
+              );
+              const finalCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+              console.log(
+                `    Final Ready: status=${finalCondition.status}, reason=${finalCondition.reason}, message="${finalCondition.message}"`
+              );
               test.assertEqual(
                 finalCondition.status,
                 'True',
@@ -358,8 +370,13 @@ async function main() {
               );
               test.assertEqual(
                 finalCondition.reason,
-                testCase.expectedBehavior.expectedReadyReason,
-                `Ready reason should be ${testCase.expectedBehavior.expectedReadyReason}`
+                expectedReason,
+                `Ready reason should be ${expectedReason}`
+              );
+            } else {
+              const finalCondition = await k8s.getMCPServerCondition(serverName, 'Ready', namespace);
+              console.log(
+                `    Final Ready: status=${finalCondition.status}, reason=${finalCondition.reason}, message="${finalCondition.message}"`
               );
             }
 
