@@ -278,12 +278,16 @@ async function main() {
           );
           console.log(`    ✓ ConfigMap patched`);
 
-          // Step 5: Wait for Ready=True, Available (after rolling update + MCP handshake)
-          console.log(`    [5/7] Waiting for rolling update to complete and Ready=True...`);
-          // Give time for the watch to trigger, config-hash to recompute, and rolling update to proceed
+          // Step 5: Wait for rolling update to fully complete
+          console.log(`    [5/7] Waiting for rolling update to complete...`);
+          // Give time for the watch to trigger and config-hash to recompute
           await sleep(5000);
+          // Wait for deployment rollout to finish (old pods terminated, new pods ready)
+          await execAsync(
+            `kubectl rollout status deployment/${serverName} -n ${namespace} --timeout=120s`
+          );
           await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
-          console.log(`    ✓ MCPServer is ready after rolling update`);
+          console.log(`    ✓ Rolling update complete, MCPServer is ready`);
 
           // Step 6: Verify config-hash changed
           console.log(`    [6/7] Verifying config-hash changed...`);
@@ -438,6 +442,149 @@ async function main() {
         } finally {
           console.log(`    Cleaning up ${serverName}...`);
           await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // B5: Custom Prometheus metrics verification (PR #122)
+      // ============================================================
+      await test('Custom Prometheus metrics are exposed (PR #122)', async () => {
+        const validServerName = 'metrics-test-valid';
+        const invalidServerName = 'metrics-test-invalid';
+        const validManifestPath = path.join(manifestsDir, '05-metrics-valid.yaml');
+        const invalidManifestPath = path.join(manifestsDir, '05-metrics-invalid.yaml');
+        const operatorNamespace = 'mcp-lifecycle-operator-system';
+        const metricsService = 'mcp-lifecycle-operator-controller-manager-metrics-service';
+        const serviceAccount = 'mcp-lifecycle-operator-controller-manager';
+        const bindingName = 'metrics-e2e-test-binding';
+        const localPort = 9443;
+        let pfProcess: any = null;
+
+        try {
+          console.log(`    Testing custom Prometheus metrics...`);
+          console.log(`    The controller should expose mcpserver_* metrics via /metrics endpoint.`);
+
+          // Step 1: Deploy valid and invalid MCPServers
+          console.log(`    [1/6] Deploying valid and invalid MCPServers...`);
+          await execAsync(`kubectl apply -f ${validManifestPath}`);
+          await execAsync(`kubectl apply -f ${invalidManifestPath}`);
+
+          // Step 2: Wait for expected conditions
+          console.log(`    [2/6] Waiting for expected conditions...`);
+          await k8s.waitForCondition(validServerName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ ${validServerName}: Ready=True, Available`);
+          await k8s.waitForCondition(invalidServerName, 'Accepted', 'False', 'Invalid', namespace, 30);
+          console.log(`    ✓ ${invalidServerName}: Accepted=False, Invalid`);
+
+          // Step 3: Set up metrics access
+          console.log(`    [3/6] Setting up metrics access (RBAC, token, port-forward)...`);
+          await execAsync(
+            `kubectl create clusterrolebinding ${bindingName} ` +
+            `--clusterrole=mcp-lifecycle-operator-metrics-reader ` +
+            `--serviceaccount=${operatorNamespace}:${serviceAccount}`
+          );
+          const { stdout: tokenRaw } = await execAsync(
+            `kubectl create token ${serviceAccount} -n ${operatorNamespace}`
+          );
+          const token = tokenRaw.trim();
+
+          pfProcess = exec(
+            `kubectl port-forward svc/${metricsService} ${localPort}:8443 -n ${operatorNamespace}`
+          );
+          await sleep(3000);
+          console.log(`    ✓ Metrics access configured`);
+
+          // Step 4: Fetch metrics
+          console.log(`    [4/6] Fetching metrics from operator...`);
+          const { stdout: metricsRaw } = await execAsync(
+            `curl -sk -H "Authorization: Bearer ${token}" https://localhost:${localPort}/metrics`
+          );
+          const metricsLines = metricsRaw.split('\n');
+          const mcpMetrics = metricsLines.filter((line: string) => line.startsWith('mcpserver_'));
+          console.log(`    ✓ Fetched ${metricsLines.length} total lines, ${mcpMetrics.length} mcpserver_* metrics`);
+
+          // Step 5: Verify condition_info metrics
+          console.log(`    [5/6] Verifying mcpserver_condition_info metrics...`);
+
+          // Valid server: Accepted=True,Valid
+          const validAccepted = mcpMetrics.find((line: string) =>
+            line.startsWith('mcpserver_condition_info') &&
+            line.includes(`name="${validServerName}"`) &&
+            line.includes('type="Accepted"') &&
+            line.includes('status="True"') &&
+            line.includes('reason="Valid"')
+          );
+          test.assert(
+            validAccepted !== undefined,
+            `Should have condition_info for ${validServerName} Accepted=True,Valid`
+          );
+          console.log(`    ✓ condition_info: ${validServerName} Accepted=True, Valid`);
+
+          // Valid server: Ready=True,Available
+          const validReady = mcpMetrics.find((line: string) =>
+            line.startsWith('mcpserver_condition_info') &&
+            line.includes(`name="${validServerName}"`) &&
+            line.includes('type="Ready"') &&
+            line.includes('status="True"') &&
+            line.includes('reason="Available"')
+          );
+          test.assert(
+            validReady !== undefined,
+            `Should have condition_info for ${validServerName} Ready=True,Available`
+          );
+          console.log(`    ✓ condition_info: ${validServerName} Ready=True, Available`);
+
+          // Invalid server: Accepted=False,Invalid
+          const invalidAccepted = mcpMetrics.find((line: string) =>
+            line.startsWith('mcpserver_condition_info') &&
+            line.includes(`name="${invalidServerName}"`) &&
+            line.includes('type="Accepted"') &&
+            line.includes('status="False"') &&
+            line.includes('reason="Invalid"')
+          );
+          test.assert(
+            invalidAccepted !== undefined,
+            `Should have condition_info for ${invalidServerName} Accepted=False,Invalid`
+          );
+          console.log(`    ✓ condition_info: ${invalidServerName} Accepted=False, Invalid`);
+
+          // Step 6: Verify other metrics exist
+          console.log(`    [6/6] Verifying other custom metrics...`);
+
+          // validation_failures_total for invalid server
+          const validationFailures = mcpMetrics.find((line: string) =>
+            line.startsWith('mcpserver_validation_failures_total') &&
+            line.includes(`name="${invalidServerName}"`)
+          );
+          test.assert(
+            validationFailures !== undefined,
+            `Should have validation_failures_total for ${invalidServerName}`
+          );
+          console.log(`    ✓ validation_failures_total: ${validationFailures?.trim()}`);
+
+          // reconcile_phase_duration_seconds histogram exists
+          const phaseDuration = mcpMetrics.find((line: string) =>
+            line.startsWith('mcpserver_reconcile_phase_duration_seconds_count') &&
+            line.includes('phase="validation"')
+          );
+          test.assert(
+            phaseDuration !== undefined,
+            'Should have reconcile_phase_duration_seconds for validation phase'
+          );
+          console.log(`    ✓ reconcile_phase_duration_seconds: validation phase present`);
+
+          console.log(`    ✓ All custom Prometheus metrics verified`);
+        } finally {
+          // Kill port-forward
+          if (pfProcess) {
+            pfProcess.kill();
+          }
+          // Cleanup
+          console.log(`    Cleaning up metrics test resources...`);
+          await execAsync(`kubectl delete -f ${validManifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete -f ${invalidManifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete clusterrolebinding ${bindingName} --ignore-not-found=true`);
           await sleep(2000);
         }
       });

@@ -62,20 +62,14 @@ These are controller behavioral features introduced by recent PRs that are not y
 **Verifies:** Normal event (reason=`Valid`, action=`ConfigurationAccepted`, note mentioning `Accepted=True`) emitted on valid configuration. Warning event (reason=`Invalid`, action=`ConfigurationValidation`, note mentioning missing ConfigMap) emitted on validation failure.
 **Note:** Issue #109 is still open -- more event types (Ready transitions, deployment problems, etc.) are planned as follow-up PRs.
 
-### B5. Custom Prometheus Metrics (PR #122, issue #100)
+### ~~B5. Custom Prometheus Metrics (PR #122, issue #100)~~ -- COVERED
 
 **Merged:** 2026-04-28
-**Metrics added:**
-| Metric | Type | Description |
-|--------|------|-------------|
-| `mcpserver_condition_info` | Gauge | Current condition state (Accepted/Ready) with status and reason labels |
-| `mcpserver_validation_failures_total` | Counter | Configuration validation failures by reason |
-| `mcpserver_deployment_failures_total` | Counter | Deployment reconciliation failures by reason |
-| `mcpserver_reconcile_phase_duration_seconds` | Histogram | Duration of validation, deployment, and service reconciliation phases |
-| `mcpserver_referenced_resources_count` | Gauge | Referenced ConfigMaps and Secrets per MCPServer |
-
-**What to test:** Scrape the operator's `/metrics` endpoint and verify the custom metrics are present and have correct values after deploying MCPServers.
-**Testability:** Medium -- requires access to the operator's metrics endpoint from the test harness.
+**Covered by:** `test-servers/behavioral-features/` (test `05-metrics-valid` and `05-metrics-invalid`)
+**Verifies:** Deploys valid and invalid MCPServers, then scrapes the operator's `/metrics` endpoint (via port-forward with RBAC auth) and confirms:
+- `mcpserver_condition_info` gauge has correct labels for both servers (Accepted/Ready with status and reason)
+- `mcpserver_validation_failures_total` counter is incremented for invalid config
+- `mcpserver_reconcile_phase_duration_seconds` histogram has validation phase data
 
 ### B6. Env valueFrom Validation in Accepted Condition (PR #103)
 
@@ -264,7 +258,7 @@ Based on testability and coverage impact, the recommended implementation order i
 12. Item-level `mode` on storage projections
 
 ### Medium Priority (testable with some caveats)
-13. Prometheus metrics verification (B5)
+13. ~~Prometheus metrics verification (B5)~~ -- DONE
 14. `fsGroupChangePolicy`
 15. `supplementalGroupsPolicy`
 16. `terminationGracePeriodSeconds` on probes
