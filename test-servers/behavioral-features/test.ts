@@ -93,8 +93,8 @@ async function main() {
           const probePort = readinessProbe.tcpSocket.port;
           test.assertEqual(
             probePort,
-            8081,
-            `TCP socket probe port should match spec.config.port (8081), got ${probePort}`
+            8080,
+            `TCP socket probe port should match spec.config.port (8080), got ${probePort}`
           );
           console.log(`    ✓ Probe port: ${probePort} (matches spec.config.port)`);
 

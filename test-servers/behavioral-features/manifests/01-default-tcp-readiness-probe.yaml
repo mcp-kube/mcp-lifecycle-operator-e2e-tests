@@ -2,6 +2,9 @@
 # Test Case: Default TCP readiness probe injection (PR #111)
 # Scenario: MCPServer without custom health probes should get a default TCP readiness probe
 # Expected: Controller injects tcpSocket readiness probe targeting spec.config.port
+# Note: No spec.runtime.health is set -- the controller should inject a default TCP probe.
+#   runtime.security is set only to satisfy the operator's default runAsNonRoot constraint
+#   (the operator-features-validator image uses USER node which is non-numeric).
 apiVersion: mcp.x-k8s.io/v1alpha1
 kind: MCPServer
 metadata:
@@ -11,10 +14,11 @@ spec:
   source:
     type: ContainerImage
     containerImage:
-      ref: aliok/mcp-server-streamable-http:latest
+      ref: localhost/operator-features-validator:local
   config:
-    port: 8081
+    port: 8080
   runtime:
     security:
-      securityContext:
-        runAsNonRoot: false
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
