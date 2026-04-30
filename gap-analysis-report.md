@@ -43,13 +43,11 @@ These are controller behavioral features introduced by recent PRs that are not y
 **Covered by:** `test-servers/behavioral-features/` (test `01-default-tcp-readiness-probe`)
 **Verifies:** Controller injects tcpSocket readiness probe targeting `spec.config.port` when no custom probe is specified. Also verifies MCPServer reaches `Ready=True, Available`.
 
-### B2. MCP Protocol Handshake Validation (PR #111, issue #110)
+### ~~B2. MCP Protocol Handshake Validation (PR #111, issue #110)~~ -- COVERED
 
 **Merged:** 2026-04-28
-**Behavior:** After the deployment reports Available, the controller performs an MCP protocol handshake (initialize) against the service endpoint using the official Go SDK's `StreamableClientTransport`. If the handshake fails, `Ready` is set to `False` with reason `MCPEndpointUnavailable`. The handshake is skipped when the endpoint was already verified for the current generation.
-**New condition reason:** `MCPEndpointUnavailable` (Ready=False)
-**What to test:** This is implicitly tested whenever a valid MCP server becomes Ready. Could explicitly test the failure case with a non-MCP HTTP server (e.g. nginx) to verify `MCPEndpointUnavailable` reason.
-**Testability:** High
+**Covered by:** `test-servers/behavioral-features/` (tests `02-mcp-handshake-validation`)
+**Verifies:** When the MCP handshake fails (server doesn't serve MCP at the configured path), `Ready=False` with reason `MCPEndpointUnavailable` and message containing "MCP endpoint is not serving a valid MCP protocol". Also tests recovery: fixing the path causes `Ready=True, Available`.
 
 ### B3. Config-Hash Rolling Update on Secret/ConfigMap Change (PR #140, issue #139, #95) -- PARTIALLY COVERED
 
@@ -256,7 +254,7 @@ Based on testability and coverage impact, the recommended implementation order i
 
 ### High Priority -- Behavioral Features (new controller logic, easy to test)
 1. ~~**B1.** Default TCP readiness probe injection (no custom probe specified)~~ -- DONE
-2. **B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason
+2. ~~**B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason~~ -- DONE
 3. **B3.** Config-hash rolling update on Secret/ConfigMap data change (partially covered by error-conditions tests)
 4. **B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)
 

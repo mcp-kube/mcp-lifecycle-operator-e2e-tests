@@ -1,0 +1,26 @@
+---
+# Test Case: MCP handshake validation (PR #111)
+# Scenario: MCPServer with a wrong config.path should fail MCP handshake
+# Expected: Controller sets Ready=False, MCPEndpointUnavailable because the
+#   server listens on port 8080 and serves MCP at /mcp (default), but the
+#   operator tries to handshake at /not-an-mcp-endpoint (which returns 404).
+#   The TCP readiness probe passes (port is open), so the Deployment becomes
+#   Available, but the controller-level MCP handshake fails.
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: mcp-handshake-validation
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+    path: /not-an-mcp-endpoint
+  runtime:
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
