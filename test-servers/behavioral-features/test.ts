@@ -589,6 +589,125 @@ async function main() {
         }
       });
 
+      // ============================================================
+      // B6: Env valueFrom validation - missing Secret (PR #103)
+      // ============================================================
+      await test('Accepted=False when env valueFrom references missing Secret (PR #103)', async () => {
+        const serverName = 'env-valuefrom-missing-secret';
+        const manifestPath = path.join(manifestsDir, '06-env-valuefrom-missing-secret.yaml');
+        const missingSecretName = 'this-secret-does-not-exist-for-valuefrom';
+
+        try {
+          console.log(`    Testing env valueFrom validation with missing Secret...`);
+          console.log(`    env[].valueFrom.secretKeyRef referencing a non-existent Secret`);
+          console.log(`    should cause Accepted=False, Invalid.`);
+
+          // Step 1: Deploy MCPServer with missing secret reference
+          console.log(`    [1/3] Deploying MCPServer with missing secretKeyRef...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=False, Invalid
+          console.log(`    [2/3] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 30);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'False', 'Accepted should be False');
+          test.assertEqual(acceptedCondition.reason, 'Invalid', 'Accepted reason should be Invalid');
+          console.log(`    ✓ Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+
+          // Step 3: Verify condition message mentions the secret and env var
+          console.log(`    [3/3] Verifying condition message...`);
+          test.assert(
+            acceptedCondition.message?.includes(missingSecretName),
+            `Accepted message should mention missing Secret "${missingSecretName}", got: "${acceptedCondition.message}"`
+          );
+          test.assert(
+            acceptedCondition.message?.toLowerCase().includes('env'),
+            `Accepted message should mention "env", got: "${acceptedCondition.message}"`
+          );
+          console.log(`    ✓ Message: "${acceptedCondition.message}"`);
+          console.log(`    ✓ Correctly rejected: missing Secret via env valueFrom`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // B6: Env valueFrom validation - missing ConfigMap (PR #103)
+      // ============================================================
+      await test('Accepted=False when env valueFrom references missing ConfigMap (PR #103)', async () => {
+        const serverName = 'env-valuefrom-missing-configmap';
+        const manifestPath = path.join(manifestsDir, '06-env-valuefrom-missing-configmap.yaml');
+        const missingConfigMapName = 'this-configmap-does-not-exist-for-valuefrom';
+
+        try {
+          console.log(`    Testing env valueFrom validation with missing ConfigMap...`);
+          console.log(`    env[].valueFrom.configMapKeyRef referencing a non-existent ConfigMap`);
+          console.log(`    should cause Accepted=False, Invalid.`);
+
+          // Step 1: Deploy MCPServer with missing configmap reference
+          console.log(`    [1/3] Deploying MCPServer with missing configMapKeyRef...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=False, Invalid
+          console.log(`    [2/3] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 30);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'False', 'Accepted should be False');
+          test.assertEqual(acceptedCondition.reason, 'Invalid', 'Accepted reason should be Invalid');
+          console.log(`    ✓ Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+
+          // Step 3: Verify condition message mentions the configmap and env var
+          console.log(`    [3/3] Verifying condition message...`);
+          test.assert(
+            acceptedCondition.message?.includes(missingConfigMapName),
+            `Accepted message should mention missing ConfigMap "${missingConfigMapName}", got: "${acceptedCondition.message}"`
+          );
+          test.assert(
+            acceptedCondition.message?.toLowerCase().includes('env'),
+            `Accepted message should mention "env", got: "${acceptedCondition.message}"`
+          );
+          console.log(`    ✓ Message: "${acceptedCondition.message}"`);
+          console.log(`    ✓ Correctly rejected: missing ConfigMap via env valueFrom`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // B6: Env valueFrom validation - optional secretKeyRef (PR #103)
+      // ============================================================
+      await test('Accepted=True when env valueFrom uses optional secretKeyRef (PR #103)', async () => {
+        const serverName = 'env-valuefrom-optional-secret';
+        const manifestPath = path.join(manifestsDir, '06-env-valuefrom-optional-secret.yaml');
+
+        try {
+          console.log(`    Testing env valueFrom validation with optional secretKeyRef...`);
+          console.log(`    env[].valueFrom.secretKeyRef with optional: true referencing a`);
+          console.log(`    non-existent Secret should still pass validation (Accepted=True).`);
+
+          // Step 1: Deploy MCPServer with optional missing secret reference
+          console.log(`    [1/2] Deploying MCPServer with optional secretKeyRef...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True, Valid
+          console.log(`    [2/2] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          const acceptedCondition = await k8s.getMCPServerCondition(serverName, 'Accepted', namespace);
+          test.assertEqual(acceptedCondition.status, 'True', 'Accepted should be True');
+          test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
+          console.log(`    ✓ Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
+          console.log(`    ✓ Correctly accepted: optional secretKeyRef skips validation`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
     });
   } catch (error) {
     console.error('Fatal error:', error);

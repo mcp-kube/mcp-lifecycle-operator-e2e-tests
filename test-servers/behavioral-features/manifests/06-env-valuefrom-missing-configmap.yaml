@@ -1,0 +1,22 @@
+---
+# Test Case: Env valueFrom validation - missing ConfigMap (PR #103)
+# Scenario: An MCPServer with env[].valueFrom.configMapKeyRef referencing a
+#   non-existent ConfigMap should get Accepted=False, Invalid
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: env-valuefrom-missing-configmap
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+    env:
+      - name: MY_CONFIGMAP_VAR
+        valueFrom:
+          configMapKeyRef:
+            name: this-configmap-does-not-exist-for-valuefrom
+            key: some-key

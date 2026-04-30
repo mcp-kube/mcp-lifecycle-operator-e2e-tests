@@ -71,12 +71,11 @@ These are controller behavioral features introduced by recent PRs that are not y
 - `mcpserver_validation_failures_total` counter is incremented for invalid config
 - `mcpserver_reconcile_phase_duration_seconds` histogram has validation phase data
 
-### B6. Env valueFrom Validation in Accepted Condition (PR #103)
+### ~~B6. Env valueFrom Validation in Accepted Condition (PR #103)~~ -- COVERED
 
 **Merged:** 2026-04-17
-**Behavior:** `setAcceptedCondition` now validates `env[].valueFrom.configMapKeyRef` and `secretKeyRef` references (not just `envFrom` and storage refs). Missing references cause `Accepted=False` with reason `Invalid`. The `optional` field on key selectors is respected.
-**What to test:** Already partially covered in `error-conditions` tests. Could add explicit test for `env[].valueFrom.secretKeyRef` referencing a missing Secret (without `optional: true`) to verify `Accepted=False`.
-**Testability:** High
+**Covered by:** `test-servers/behavioral-features/` (tests `06-env-valuefrom-missing-secret`, `06-env-valuefrom-missing-configmap`, `06-env-valuefrom-optional-secret`)
+**Verifies:** Missing `secretKeyRef` reference causes `Accepted=False, Invalid` with message mentioning secret name and "env var". Missing `configMapKeyRef` reference causes `Accepted=False, Invalid` with message mentioning configmap name and "env var". `optional: true` on `secretKeyRef` skips validation and allows `Accepted=True, Valid` despite missing Secret.
 
 ### B7. Transient vs Permanent Error Distinction (PR #107, issue #86)
 
