@@ -1,0 +1,34 @@
+---
+# Test Case: Config-hash rolling update (PR #140)
+# Scenario: Updating a referenced ConfigMap's data should trigger a rolling update
+#   via the mcp.x-k8s.io/config-hash pod template annotation.
+# Expected: When ConfigMap data changes, the controller recomputes the config-hash,
+#   updates the Deployment pod template annotation, and Kubernetes performs a rolling
+#   update (old pods terminated, new pods created with the new hash).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-hash-test-configmap
+  namespace: default
+data:
+  config.txt: "initial-data"
+---
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: config-hash-rolling-update
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: quay.io/containers/kubernetes_mcp_server:latest
+  config:
+    port: 8080
+    storage:
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: config-hash-test-configmap

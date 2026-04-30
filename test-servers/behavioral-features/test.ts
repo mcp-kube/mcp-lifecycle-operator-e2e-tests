@@ -228,6 +228,103 @@ async function main() {
         }
       });
 
+      // ============================================================
+      // B3: Config-hash rolling update on ConfigMap change (PR #140)
+      // ============================================================
+      await test('Config-hash rolling update on ConfigMap change (PR #140)', async () => {
+        const serverName = 'config-hash-rolling-update';
+        const configMapName = 'config-hash-test-configmap';
+        const manifestPath = path.join(manifestsDir, '03-config-hash-rolling-update.yaml');
+
+        try {
+          console.log(`    Testing config-hash rolling update...`);
+          console.log(`    When referenced ConfigMap data changes, the controller recomputes`);
+          console.log(`    the config-hash annotation and Kubernetes performs a rolling update.`);
+
+          // Step 1: Deploy ConfigMap + MCPServer
+          console.log(`    [1/7] Deploying ConfigMap and MCPServer...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Ready=True, Available
+          console.log(`    [2/7] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ MCPServer is ready`);
+
+          // Step 3: Record initial config-hash and pod names
+          console.log(`    [3/7] Recording initial state...`);
+          const initialDeploymentJson = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const initialDeployment = JSON.parse(initialDeploymentJson.stdout);
+          const initialConfigHash = initialDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
+
+          test.assert(
+            initialConfigHash.length > 0,
+            'Config-hash annotation should be non-empty when ConfigMap is referenced'
+          );
+          console.log(`    ✓ Initial config-hash: ${initialConfigHash.substring(0, 16)}...`);
+
+          const { stdout: initialPodsRaw } = await execAsync(
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o jsonpath='{.items[*].metadata.name}'`
+          );
+          const initialPodNames = initialPodsRaw.trim().split(/\s+/).filter(Boolean);
+          console.log(`    ✓ Initial pods: ${initialPodNames.join(', ')}`);
+
+          // Step 4: Update ConfigMap data
+          console.log(`    [4/7] Updating ConfigMap data...`);
+          await execAsync(
+            `kubectl patch configmap ${configMapName} -n ${namespace} --type=merge -p '{"data":{"config.txt":"updated-data"}}'`
+          );
+          console.log(`    ✓ ConfigMap patched`);
+
+          // Step 5: Wait for Ready=True, Available (after rolling update + MCP handshake)
+          console.log(`    [5/7] Waiting for rolling update to complete and Ready=True...`);
+          // Give time for the watch to trigger, config-hash to recompute, and rolling update to proceed
+          await sleep(5000);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ MCPServer is ready after rolling update`);
+
+          // Step 6: Verify config-hash changed
+          console.log(`    [6/7] Verifying config-hash changed...`);
+          const finalDeploymentJson = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const finalDeployment = JSON.parse(finalDeploymentJson.stdout);
+          const finalConfigHash = finalDeployment.spec?.template?.metadata?.annotations?.['mcp.x-k8s.io/config-hash'] || '';
+
+          test.assert(
+            finalConfigHash.length > 0,
+            'Config-hash annotation should still be non-empty'
+          );
+          test.assert(
+            initialConfigHash !== finalConfigHash,
+            `Config-hash should change (was ${initialConfigHash.substring(0, 16)}..., now ${finalConfigHash.substring(0, 16)}...)`
+          );
+          console.log(`    ✓ Config-hash changed: ${initialConfigHash.substring(0, 16)}... → ${finalConfigHash.substring(0, 16)}...`);
+
+          // Step 7: Verify pods were rolled
+          console.log(`    [7/7] Verifying pods were rolled...`);
+          const { stdout: finalPodsRaw } = await execAsync(
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o jsonpath='{.items[*].metadata.name}'`
+          );
+          const finalPodNames = finalPodsRaw.trim().split(/\s+/).filter(Boolean);
+          const podsChanged = !initialPodNames.every(name => finalPodNames.includes(name));
+
+          test.assert(
+            podsChanged,
+            `Pods should have been rolled (initial: ${initialPodNames.join(', ')}, final: ${finalPodNames.join(', ')})`
+          );
+          console.log(`    ✓ Pods rolled: ${initialPodNames.join(', ')} → ${finalPodNames.join(', ')}`);
+          console.log(`    ✓ Config-hash rolling update verified successfully`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
     });
   } catch (error) {
     console.error('Fatal error:', error);

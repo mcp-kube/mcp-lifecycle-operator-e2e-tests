@@ -49,13 +49,11 @@ These are controller behavioral features introduced by recent PRs that are not y
 **Covered by:** `test-servers/behavioral-features/` (tests `02-mcp-handshake-validation`)
 **Verifies:** When the MCP handshake fails (server doesn't serve MCP at the configured path), `Ready=False` with reason `MCPEndpointUnavailable` and message containing "MCP endpoint is not serving a valid MCP protocol". Also tests recovery: fixing the path causes `Ready=True, Available`.
 
-### B3. Config-Hash Rolling Update on Secret/ConfigMap Change (PR #140, issue #139, #95) -- PARTIALLY COVERED
+### ~~B3. Config-Hash Rolling Update on Secret/ConfigMap Change (PR #140, issue #139, #95)~~ -- COVERED
 
 **Merged:** 2026-04-29
-**Behavior:** The controller computes a SHA-256 hash of all referenced ConfigMap and Secret data and stores it as a pod template annotation (`mcp.x-k8s.io/config-hash`). When referenced data changes, the hash changes, the pod template changes, and Kubernetes performs a rolling update.
-**What to test:** Deploy an MCPServer referencing a ConfigMap/Secret, update the ConfigMap/Secret data, and verify that pods are rolled (new pods created with new hash annotation, old pods terminated).
-**Testability:** High
-**Partial coverage:** The `error-conditions` suite tests (ConfigMap/Secret update watch tests) now verify that the `mcp.x-k8s.io/config-hash` annotation changes when referenced ConfigMap/Secret data is updated. A dedicated test verifying the full rolling update (new pods created, old pods terminated) is still recommended.
+**Covered by:** `test-servers/behavioral-features/` (test `03-config-hash-rolling-update`) and `error-conditions` (ConfigMap/Secret update watch tests)
+**Verifies:** Deploying an MCPServer referencing a ConfigMap, updating the ConfigMap data, and confirming: config-hash annotation changes, pods are rolled (new pods created, old pods terminated), and MCPServer recovers to `Ready=True, Available`.
 
 ### B4. Kubernetes Event Recording (PR #118, issue #109)
 
@@ -255,7 +253,7 @@ Based on testability and coverage impact, the recommended implementation order i
 ### High Priority -- Behavioral Features (new controller logic, easy to test)
 1. ~~**B1.** Default TCP readiness probe injection (no custom probe specified)~~ -- DONE
 2. ~~**B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason~~ -- DONE
-3. **B3.** Config-hash rolling update on Secret/ConfigMap data change (partially covered by error-conditions tests)
+3. ~~**B3.** Config-hash rolling update on Secret/ConfigMap data change~~ -- DONE
 4. **B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)
 
 ### High Priority -- CRD Fields (easy to test, meaningful coverage)
