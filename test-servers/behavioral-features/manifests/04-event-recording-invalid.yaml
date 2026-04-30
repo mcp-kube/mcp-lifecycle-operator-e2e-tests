@@ -1,0 +1,23 @@
+---
+# Test Case: Event recording - invalid configuration (PR #118)
+# Scenario: An MCPServer referencing a non-existent ConfigMap should emit a Warning event
+# Expected: A Warning event with reason "Invalid" and note mentioning the missing ConfigMap
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: event-recording-invalid
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+    storage:
+      - path: /config
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: this-configmap-does-not-exist-for-events

@@ -1,0 +1,21 @@
+---
+# Test Case: Event recording - valid configuration (PR #118)
+# Scenario: A valid MCPServer should emit a Normal event when Accepted transitions to True
+# Expected: A Normal event with reason "Valid" and note containing "Accepted=True"
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: event-recording-valid
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+  runtime:
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000

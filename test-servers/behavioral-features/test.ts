@@ -325,6 +325,123 @@ async function main() {
         }
       });
 
+      // ============================================================
+      // B4: Event recording - Normal event on valid config (PR #118)
+      // ============================================================
+      await test('Normal event emitted on valid configuration (PR #118)', async () => {
+        const serverName = 'event-recording-valid';
+        const manifestPath = path.join(manifestsDir, '04-event-recording-valid.yaml');
+
+        try {
+          console.log(`    Testing Normal event emission on valid configuration...`);
+          console.log(`    The controller should emit a Normal event when Accepted transitions to True.`);
+
+          // Step 1: Deploy valid MCPServer
+          console.log(`    [1/3] Deploying valid MCPServer...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True
+          console.log(`    [2/3] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          console.log(`    ✓ Accepted: True, Valid`);
+
+          // Give a moment for the event to be persisted
+          await sleep(2000);
+
+          // Step 3: Query events and verify Normal event exists
+          console.log(`    [3/3] Querying events for Normal event...`);
+          const { stdout: eventsJson } = await execAsync(
+            `kubectl get events.v1.events.k8s.io -n ${namespace} -o json`
+          );
+          const allEvents = JSON.parse(eventsJson);
+          const mcpEvents = allEvents.items.filter((e: any) =>
+            e.regarding?.name === serverName &&
+            e.reportingController === 'mcpserver-controller'
+          );
+          console.log(`    Found ${mcpEvents.length} event(s) from mcpserver-controller for ${serverName}`);
+
+          const normalEvents = mcpEvents.filter((e: any) =>
+            e.type === 'Normal' && e.reason === 'Valid'
+          );
+
+          test.assert(
+            normalEvents.length > 0,
+            `Should have at least one Normal event with reason "Valid" (found ${mcpEvents.length} total events)`
+          );
+
+          const normalEvent = normalEvents[0];
+          test.assert(
+            normalEvent.note?.includes('Accepted=True'),
+            `Normal event note should mention Accepted=True, got: "${normalEvent.note}"`
+          );
+          console.log(`    ✓ Normal event: reason=${normalEvent.reason}, action=${normalEvent.action}, note="${normalEvent.note}"`);
+          console.log(`    ✓ Controller correctly emitted Normal event on Accepted=True`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // B4: Event recording - Warning event on invalid config (PR #118)
+      // ============================================================
+      await test('Warning event emitted on invalid configuration (PR #118)', async () => {
+        const serverName = 'event-recording-invalid';
+        const manifestPath = path.join(manifestsDir, '04-event-recording-invalid.yaml');
+        const missingConfigMapName = 'this-configmap-does-not-exist-for-events';
+
+        try {
+          console.log(`    Testing Warning event emission on invalid configuration...`);
+          console.log(`    The controller should emit a Warning event on permanent validation failure.`);
+
+          // Step 1: Deploy MCPServer referencing non-existent ConfigMap
+          console.log(`    [1/3] Deploying MCPServer with missing ConfigMap reference...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=False, Invalid
+          console.log(`    [2/3] Waiting for Accepted=False, Invalid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'False', 'Invalid', namespace, 30);
+          console.log(`    ✓ Accepted: False, Invalid`);
+
+          // Give a moment for the event to be persisted
+          await sleep(2000);
+
+          // Step 3: Query events and verify Warning event exists
+          console.log(`    [3/3] Querying events for Warning event...`);
+          const { stdout: eventsJson } = await execAsync(
+            `kubectl get events.v1.events.k8s.io -n ${namespace} -o json`
+          );
+          const allEvents = JSON.parse(eventsJson);
+          const mcpEvents = allEvents.items.filter((e: any) =>
+            e.regarding?.name === serverName &&
+            e.reportingController === 'mcpserver-controller'
+          );
+          console.log(`    Found ${mcpEvents.length} event(s) from mcpserver-controller for ${serverName}`);
+
+          const warningEvents = mcpEvents.filter((e: any) =>
+            e.type === 'Warning' && e.reason === 'Invalid'
+          );
+
+          test.assert(
+            warningEvents.length > 0,
+            `Should have at least one Warning event with reason "Invalid" (found ${mcpEvents.length} total events)`
+          );
+
+          const warningEvent = warningEvents[0];
+          test.assert(
+            warningEvent.note?.includes(missingConfigMapName),
+            `Warning event note should mention missing ConfigMap "${missingConfigMapName}", got: "${warningEvent.note}"`
+          );
+          console.log(`    ✓ Warning event: reason=${warningEvent.reason}, action=${warningEvent.action}, note="${warningEvent.note}"`);
+          console.log(`    ✓ Controller correctly emitted Warning event on validation failure`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
     });
   } catch (error) {
     console.error('Fatal error:', error);

@@ -55,14 +55,11 @@ These are controller behavioral features introduced by recent PRs that are not y
 **Covered by:** `test-servers/behavioral-features/` (test `03-config-hash-rolling-update`) and `error-conditions` (ConfigMap/Secret update watch tests)
 **Verifies:** Deploying an MCPServer referencing a ConfigMap, updating the ConfigMap data, and confirming: config-hash annotation changes, pods are rolled (new pods created, old pods terminated), and MCPServer recovers to `Ready=True, Available`.
 
-### B4. Kubernetes Event Recording (PR #118, issue #109)
+### ~~B4. Kubernetes Event Recording (PR #118, issue #109)~~ -- COVERED
 
 **Merged:** 2026-04-29
-**Behavior:** The controller now emits Kubernetes Events:
-- **Normal** event on `Accepted=True` transition
-- **Warning** event on permanent validation failure (deduped if same reason/message)
-**What to test:** Deploy a valid MCPServer and verify a Normal event is emitted. Deploy an invalid MCPServer (e.g. missing ConfigMap ref) and verify a Warning event is emitted.
-**Testability:** High
+**Covered by:** `test-servers/behavioral-features/` (tests `04-event-recording-valid` and `04-event-recording-invalid`)
+**Verifies:** Normal event (reason=`Valid`, action=`ConfigurationAccepted`, note mentioning `Accepted=True`) emitted on valid configuration. Warning event (reason=`Invalid`, action=`ConfigurationValidation`, note mentioning missing ConfigMap) emitted on validation failure.
 **Note:** Issue #109 is still open -- more event types (Ready transitions, deployment problems, etc.) are planned as follow-up PRs.
 
 ### B5. Custom Prometheus Metrics (PR #122, issue #100)
@@ -254,7 +251,7 @@ Based on testability and coverage impact, the recommended implementation order i
 1. ~~**B1.** Default TCP readiness probe injection (no custom probe specified)~~ -- DONE
 2. ~~**B2.** MCP handshake validation / `MCPEndpointUnavailable` condition reason~~ -- DONE
 3. ~~**B3.** Config-hash rolling update on Secret/ConfigMap data change~~ -- DONE
-4. **B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)
+4. ~~**B4.** Kubernetes Event recording (Normal on Accepted=True, Warning on validation failure)~~ -- DONE
 
 ### High Priority -- CRD Fields (easy to test, meaningful coverage)
 5. `RecursiveReadOnly` storage permission
