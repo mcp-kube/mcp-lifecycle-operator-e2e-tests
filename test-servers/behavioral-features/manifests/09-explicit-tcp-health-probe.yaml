@@ -1,0 +1,38 @@
+---
+# Test Case: Explicit tcpSocket health probe type
+# Scenario: MCPServer with explicitly configured tcpSocket probes
+# Expected: Operator configures tcpSocket probes targeting the specified port.
+#   This is different from B1 (auto-injected default probe) - this tests
+#   EXPLICIT user configuration of tcpSocket probes.
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: explicit-tcp-health-probe
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+  runtime:
+    health:
+      readinessProbe:
+        tcpSocket:
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
+        timeoutSeconds: 2
+        failureThreshold: 3
+      livenessProbe:
+        tcpSocket:
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 3
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000

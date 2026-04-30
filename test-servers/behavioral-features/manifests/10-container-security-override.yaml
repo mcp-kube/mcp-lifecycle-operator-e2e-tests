@@ -1,0 +1,36 @@
+---
+# Test Case: Container-level runAsUser/runAsGroup/runAsNonRoot overrides
+# Scenario: MCPServer with BOTH pod-level and container-level security context
+#   Pod level: runAsUser=1000, runAsGroup=3000
+#   Container level: runAsUser=2000, runAsGroup=4000, runAsNonRoot=true
+# Expected: Container-level values OVERRIDE pod-level values.
+#   The container should run as UID 2000, GID 4000 (not 1000/3000).
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: container-security-override
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+  runtime:
+    health:
+      readinessProbe:
+        tcpSocket:
+          port: 8080
+        initialDelaySeconds: 3
+        periodSeconds: 5
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+        runAsNonRoot: true
+      securityContext:
+        runAsUser: 2000
+        runAsGroup: 4000
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false

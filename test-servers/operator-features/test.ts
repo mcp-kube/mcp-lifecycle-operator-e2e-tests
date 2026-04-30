@@ -340,6 +340,74 @@ async function main() {
         test.assertEqual(permissionBits, 0o755, 'All files should have 0755 permissions (defaultMode)');
       });
 
+      // ----- Storage: Per-Item Mode (File Permission Overrides) -----
+
+      // Test: Secret file with inherited defaultMode (0644)
+      await test('secret item without mode override inherits defaultMode', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/secret-item-mode/default-mode-file.txt' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Default mode file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        console.log(`    /secret-item-mode/default-mode-file.txt permissions: 0${permissionBits.toString(8)} (defaultMode 0644)`);
+        test.assertEqual(permissionBits, 0o644, 'Should inherit defaultMode 0644');
+      });
+
+      // Test: Secret file with per-item mode override (0400 -> 0440 with fsGroup)
+      await test('secret item with mode override has custom permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/secret-item-mode/custom-mode-file.txt' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Custom mode file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        console.log(`    /secret-item-mode/custom-mode-file.txt permissions: 0${permissionBits.toString(8)} (item mode 0400 + fsGroup)`);
+        // Per-item mode 0400 becomes 0440 when fsGroup is set
+        test.assertEqual(permissionBits, 0o440, 'Should have per-item mode 0400 (+ fsGroup -> 0440)');
+      });
+
+      // Test: ConfigMap file with inherited defaultMode (0644)
+      await test('configmap item without mode override inherits defaultMode', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/configmap-item-mode/default-mode-file.txt' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Default mode file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        console.log(`    /configmap-item-mode/default-mode-file.txt permissions: 0${permissionBits.toString(8)} (defaultMode 0644)`);
+        test.assertEqual(permissionBits, 0o644, 'Should inherit defaultMode 0644');
+      });
+
+      // Test: ConfigMap file with per-item mode override (0755)
+      await test('configmap item with mode override has custom permissions', async () => {
+        const result = await client.callTool('get_file_permissions', { path: '/configmap-item-mode/custom-mode-file.txt' });
+        const data = JSON.parse(result.content[0].text);
+
+        test.assert(data.exists, 'Custom mode file should exist');
+        const mode = parseInt(data.permissions.mode, 8);
+        const permissionBits = mode & 0o777;
+        console.log(`    /configmap-item-mode/custom-mode-file.txt permissions: 0${permissionBits.toString(8)} (item mode 0755)`);
+        test.assertEqual(permissionBits, 0o755, 'Should have per-item mode 0755');
+      });
+
+      // Test: Verify per-item mode differs from defaultMode on same volume
+      await test('per-item mode is different from defaultMode on the same volume', async () => {
+        const defaultResult = await client.callTool('get_file_permissions', { path: '/configmap-item-mode/default-mode-file.txt' });
+        const defaultData = JSON.parse(defaultResult.content[0].text);
+        const defaultPermBits = parseInt(defaultData.permissions.mode, 8) & 0o777;
+
+        const customResult = await client.callTool('get_file_permissions', { path: '/configmap-item-mode/custom-mode-file.txt' });
+        const customData = JSON.parse(customResult.content[0].text);
+        const customPermBits = parseInt(customData.permissions.mode, 8) & 0o777;
+
+        console.log(`    Default mode file: 0${defaultPermBits.toString(8)}, Custom mode file: 0${customPermBits.toString(8)}`);
+        test.assert(
+          defaultPermBits !== customPermBits,
+          `Per-item mode (0${customPermBits.toString(8)}) should differ from defaultMode (0${defaultPermBits.toString(8)})`
+        );
+      });
+
       // ----- Config: Storage (EmptyDir Volumes) -----
 
       // Test: Verify EmptyDir with default medium exists and is writable
@@ -641,6 +709,38 @@ async function main() {
         test.assert(data.value !== null && data.value.length > 0, 'Memory request should not be empty');
       });
 
+      // ----- Config: Environment Variables from resourceFieldRef with divisor -----
+
+      // Test: Environment variable from resourceFieldRef with divisor (memory in MiB)
+      await test('env var from resourceFieldRef with divisor 1Mi is correct', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_resource_limits_memory_mib' });
+        const data = JSON.parse(result.content[0].text);
+        test.assert(data.exists, 'env_var_from_resource_limits_memory_mib should exist');
+        console.log(`    Memory limit with divisor 1Mi: ${data.value} (expected: 128)`);
+        // Memory limit is 128Mi, divisor is 1Mi, so the value should be "128"
+        test.assertEqual(data.value, '128', 'Memory limit with divisor 1Mi should be 128');
+      });
+
+      // ----- Config: Environment Variables from optional valueFrom -----
+
+      // Test: Verify optional secretKeyRef env var is absent when Secret does not exist
+      await test('optional secretKeyRef env var is absent when Secret does not exist', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_optional_secret' });
+        const data = JSON.parse(result.content[0].text);
+        console.log(`    env_var_from_optional_secret exists: ${data.exists} (should be false)`);
+        test.assert(!data.exists, 'Optional env var from missing secret should not exist');
+        // The fact that this test runs proves the pod started fine despite the missing Secret
+      });
+
+      // Test: Verify optional configMapKeyRef env var is absent when ConfigMap does not exist
+      await test('optional configMapKeyRef env var is absent when ConfigMap does not exist', async () => {
+        const result = await client.callTool('get_env_var', { name: 'env_var_from_optional_configmap' });
+        const data = JSON.parse(result.content[0].text);
+        console.log(`    env_var_from_optional_configmap exists: ${data.exists} (should be false)`);
+        test.assert(!data.exists, 'Optional env var from missing configmap should not exist');
+        // The fact that this test runs proves the pod started fine despite the missing ConfigMap
+      });
+
       // ----- Config: Security -----
 
       // Test: Verify security context (user/group IDs)
@@ -652,6 +752,18 @@ async function main() {
         test.assertEqual(data.uid, 1000, 'UID should be 1000');
         test.assertEqual(data.gid, 3000, 'GID should be 3000');
         test.assert(data.groups.includes(2000), 'Should be in group 2000 (fsGroup)');
+      });
+
+      // Test: Verify supplementalGroups are applied to the process
+      await test('supplementalGroups are applied to the process', async () => {
+        const result = await client.callTool('check_user_id', {});
+        const data = JSON.parse(result.content[0].text);
+
+        console.log(`    Process groups: [${data.groups.join(', ')}]`);
+        test.assert(data.groups.includes(4000), 'Should be in supplemental group 4000');
+        test.assert(data.groups.includes(5000), 'Should be in supplemental group 5000');
+        // Also verify the existing groups are still present
+        test.assert(data.groups.includes(2000), 'Should still be in fsGroup 2000');
       });
 
       // Test: Verify file permissions reflect fsGroup

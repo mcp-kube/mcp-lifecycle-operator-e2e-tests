@@ -156,6 +156,27 @@ data:
     # Configuration file
     setting=value
 ---
+# Secret #8: Used for testing per-item mode overrides
+apiVersion: v1
+kind: Secret
+metadata:
+  name: secret-for-item-mode
+  namespace: default
+type: Opaque
+stringData:
+  secret-file-default-mode.txt: "secret-content-default-mode"
+  secret-file-custom-mode.txt: "secret-content-custom-mode"
+---
+# ConfigMap #8: Used for testing per-item mode overrides
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-item-mode
+  namespace: default
+data:
+  configmap-file-default-mode.txt: "configmap-content-default-mode"
+  configmap-file-custom-mode.txt: "configmap-content-custom-mode"
+---
 # ServiceAccount: Custom service account for testing runtime.security.serviceAccountName
 apiVersion: v1
 kind: ServiceAccount
@@ -289,6 +310,40 @@ spec:
           emptyDir:
             sizeLimit: 128Mi
 
+      # Mount Secret #8 with per-item mode overrides
+      - path: /secret-item-mode
+        permissions: ReadOnly
+        source:
+          type: Secret
+          secret:
+            secretName: secret-for-item-mode
+            defaultMode: 0644
+            items:
+              - key: secret-file-default-mode.txt
+                path: default-mode-file.txt
+                # No mode override -- should inherit defaultMode 0644
+              - key: secret-file-custom-mode.txt
+                path: custom-mode-file.txt
+                mode: 0400
+                # Per-item mode override to 0400
+
+      # Mount ConfigMap #8 with per-item mode overrides
+      - path: /configmap-item-mode
+        permissions: ReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: configmap-for-item-mode
+            defaultMode: 0644
+            items:
+              - key: configmap-file-default-mode.txt
+                path: default-mode-file.txt
+                # No mode override -- should inherit defaultMode 0644
+              - key: configmap-file-custom-mode.txt
+                path: custom-mode-file.txt
+                mode: 0755
+                # Per-item mode override to 0755
+
     # Environment variables from multiple sources
     env:
       # Plain environment variable
@@ -373,6 +428,29 @@ spec:
           resourceFieldRef:
             resource: requests.memory
 
+      # From resourceFieldRef with divisor - memory limit in MiB
+      - name: env_var_from_resource_limits_memory_mib
+        valueFrom:
+          resourceFieldRef:
+            resource: limits.memory
+            divisor: "1Mi"
+
+      # From optional secretKeyRef - non-existent Secret, should not crash pod
+      - name: env_var_from_optional_secret
+        valueFrom:
+          secretKeyRef:
+            name: this-secret-does-not-exist-runtime
+            key: some-key
+            optional: true
+
+      # From optional configMapKeyRef - non-existent ConfigMap, should not crash pod
+      - name: env_var_from_optional_configmap
+        valueFrom:
+          configMapKeyRef:
+            name: this-configmap-does-not-exist-runtime
+            key: some-key
+            optional: true
+
     # Environment variables from envFrom (bulk injection)
     envFrom:
       # From Secret #3 (secret-for-envfrom) - all keys become env vars without prefix
@@ -436,6 +514,7 @@ spec:
         runAsGroup: 3000
         fsGroup: 2000
         runAsNonRoot: true
+        supplementalGroups: [4000, 5000]
         seccompProfile:
           type: RuntimeDefault
       # Container-level security context

@@ -1,0 +1,38 @@
+---
+# ConfigMap for recursive read-only mount
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-recursive-readonly
+  namespace: default
+data:
+  test-file.txt: "recursive-readonly-test-content"
+---
+# Test Case: RecursiveReadOnly storage permission
+# Scenario: MCPServer with permissions: RecursiveReadOnly on a ConfigMap mount
+# Expected: Volume mount has readOnly: true AND recursiveReadOnly: Enabled
+# Requires: Kubernetes 1.30+ (we use 1.35)
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: recursive-readonly-storage
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+    storage:
+      - path: /recursive-readonly-mount
+        permissions: RecursiveReadOnly
+        source:
+          type: ConfigMap
+          configMap:
+            name: configmap-for-recursive-readonly
+  runtime:
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000

@@ -309,8 +309,9 @@ async function main() {
 
           // Step 7: Verify pods were rolled
           console.log(`    [7/7] Verifying pods were rolled...`);
+          // Use --field-selector to exclude Terminating pods (old pods may still be shutting down)
           const { stdout: finalPodsRaw } = await execAsync(
-            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o jsonpath='{.items[*].metadata.name}'`
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} --field-selector=status.phase=Running -o jsonpath='{.items[*].metadata.name}'`
           );
           const finalPodNames = finalPodsRaw.trim().split(/\s+/).filter(Boolean);
           const podsChanged = !initialPodNames.every(name => finalPodNames.includes(name));
@@ -701,6 +702,293 @@ async function main() {
           test.assertEqual(acceptedCondition.reason, 'Valid', 'Accepted reason should be Valid');
           console.log(`    ✓ Accepted: status=${acceptedCondition.status}, reason=${acceptedCondition.reason}`);
           console.log(`    ✓ Correctly accepted: optional secretKeyRef skips validation`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // CRD Field #5: RecursiveReadOnly storage permission
+      // ============================================================
+      await test('RecursiveReadOnly storage permission sets recursiveReadOnly on volume mount', async () => {
+        const serverName = 'recursive-readonly-storage';
+        const configMapName = 'configmap-for-recursive-readonly';
+        const manifestPath = path.join(manifestsDir, '07-recursive-readonly-storage.yaml');
+
+        try {
+          console.log(`    Testing RecursiveReadOnly storage permission...`);
+          console.log(`    permissions: RecursiveReadOnly should produce a volume mount`);
+          console.log(`    with readOnly: true and recursiveReadOnly: Enabled.`);
+
+          // Step 1: Deploy ConfigMap + MCPServer
+          console.log(`    [1/4] Deploying ConfigMap and MCPServer...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True
+          console.log(`    [2/4] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          console.log(`    ✓ Accepted: True, Valid`);
+
+          // Step 3: Wait for Ready=True
+          console.log(`    [3/4] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ Ready: True, Available`);
+
+          // Step 4: Inspect Deployment for volume mount configuration
+          console.log(`    [4/4] Inspecting Deployment for recursiveReadOnly on volume mount...`);
+          const { stdout: deploymentRaw } = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const deployment = JSON.parse(deploymentRaw);
+          const container = deployment.spec.template.spec.containers[0];
+
+          // Find the volume mount for /recursive-readonly-mount
+          const mount = container.volumeMounts?.find(
+            (vm: any) => vm.mountPath === '/recursive-readonly-mount'
+          );
+          test.assert(mount !== undefined, 'Should have a volume mount at /recursive-readonly-mount');
+          console.log(`    ✓ Volume mount found: mountPath=${mount.mountPath}`);
+
+          // Verify readOnly: true
+          test.assert(mount.readOnly === true, `Volume mount should have readOnly: true, got ${mount.readOnly}`);
+          console.log(`    ✓ readOnly: ${mount.readOnly}`);
+
+          // Verify recursiveReadOnly: Enabled
+          test.assertEqual(
+            mount.recursiveReadOnly,
+            'Enabled',
+            `Volume mount should have recursiveReadOnly: Enabled, got ${mount.recursiveReadOnly}`
+          );
+          console.log(`    ✓ recursiveReadOnly: ${mount.recursiveReadOnly}`);
+          console.log(`    ✓ RecursiveReadOnly storage permission verified successfully`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await execAsync(`kubectl delete configmap ${configMapName} -n ${namespace} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // CRD Field #6: Exec health probe type
+      // ============================================================
+      await test('Exec health probes are configured correctly', async () => {
+        const serverName = 'exec-health-probe';
+        const manifestPath = path.join(manifestsDir, '08-exec-health-probe.yaml');
+
+        try {
+          console.log(`    Testing exec health probe type...`);
+          console.log(`    The validator server creates /tmp/server-ready on startup,`);
+          console.log(`    so exec probes using "cat /tmp/server-ready" should pass.`);
+
+          // Step 1: Deploy MCPServer with exec probes
+          console.log(`    [1/4] Deploying MCPServer with exec probes...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True
+          console.log(`    [2/4] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          console.log(`    ✓ Accepted: True, Valid`);
+
+          // Step 3: Wait for Ready=True (proves exec probe passes at runtime)
+          console.log(`    [3/4] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ Ready: True, Available`);
+
+          // Step 4: Inspect Deployment for exec probes
+          console.log(`    [4/4] Inspecting Deployment for exec probes...`);
+          const { stdout: deploymentRaw } = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const deployment = JSON.parse(deploymentRaw);
+          const container = deployment.spec.template.spec.containers[0];
+
+          // Verify readiness probe is exec type
+          const readinessProbe = container.readinessProbe;
+          test.assert(readinessProbe !== undefined, 'Readiness probe should exist');
+          test.assert(readinessProbe.exec !== undefined, 'Readiness probe should be exec type');
+          test.assert(readinessProbe.httpGet === undefined, 'Readiness probe should NOT have httpGet');
+          test.assert(readinessProbe.tcpSocket === undefined, 'Readiness probe should NOT have tcpSocket');
+          test.assertDeepEqual(
+            readinessProbe.exec.command,
+            ['cat', '/tmp/server-ready'],
+            'Readiness probe command should be ["cat", "/tmp/server-ready"]'
+          );
+          console.log(`    ✓ Readiness probe: exec command=${JSON.stringify(readinessProbe.exec.command)}`);
+
+          // Verify liveness probe is exec type
+          const livenessProbe = container.livenessProbe;
+          test.assert(livenessProbe !== undefined, 'Liveness probe should exist');
+          test.assert(livenessProbe.exec !== undefined, 'Liveness probe should be exec type');
+          test.assertDeepEqual(
+            livenessProbe.exec.command,
+            ['cat', '/tmp/server-ready'],
+            'Liveness probe command should be ["cat", "/tmp/server-ready"]'
+          );
+          console.log(`    ✓ Liveness probe: exec command=${JSON.stringify(livenessProbe.exec.command)}`);
+
+          // Verify probe timing parameters were passed through
+          test.assertEqual(readinessProbe.initialDelaySeconds, 3, 'Readiness initialDelaySeconds should be 3');
+          test.assertEqual(readinessProbe.periodSeconds, 5, 'Readiness periodSeconds should be 5');
+          test.assertEqual(livenessProbe.initialDelaySeconds, 5, 'Liveness initialDelaySeconds should be 5');
+          test.assertEqual(livenessProbe.periodSeconds, 10, 'Liveness periodSeconds should be 10');
+          console.log(`    ✓ Probe timing parameters verified`);
+          console.log(`    ✓ Exec health probes verified successfully`);
+          console.log(`    (Ready=True proves the exec probe passes at runtime)`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // CRD Field #7: Explicit tcpSocket health probe type
+      // ============================================================
+      await test('Explicit tcpSocket health probes are configured correctly', async () => {
+        const serverName = 'explicit-tcp-health-probe';
+        const manifestPath = path.join(manifestsDir, '09-explicit-tcp-health-probe.yaml');
+
+        try {
+          console.log(`    Testing explicit tcpSocket health probe type...`);
+          console.log(`    This tests EXPLICIT tcpSocket configuration (not auto-injected).`);
+          console.log(`    Different from B1: here the user specifies tcpSocket probes directly.`);
+
+          // Step 1: Deploy MCPServer with explicit tcpSocket probes
+          console.log(`    [1/4] Deploying MCPServer with explicit tcpSocket probes...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True
+          console.log(`    [2/4] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          console.log(`    ✓ Accepted: True, Valid`);
+
+          // Step 3: Wait for Ready=True
+          console.log(`    [3/4] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ Ready: True, Available`);
+
+          // Step 4: Inspect Deployment for tcpSocket probes
+          console.log(`    [4/4] Inspecting Deployment for tcpSocket probes...`);
+          const { stdout: deploymentRaw } = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const deployment = JSON.parse(deploymentRaw);
+          const container = deployment.spec.template.spec.containers[0];
+
+          // Verify readiness probe is tcpSocket type
+          const readinessProbe = container.readinessProbe;
+          test.assert(readinessProbe !== undefined, 'Readiness probe should exist');
+          test.assert(readinessProbe.tcpSocket !== undefined, 'Readiness probe should be tcpSocket type');
+          test.assert(readinessProbe.httpGet === undefined, 'Readiness probe should NOT have httpGet');
+          test.assert(readinessProbe.exec === undefined, 'Readiness probe should NOT have exec');
+          test.assertEqual(
+            readinessProbe.tcpSocket.port,
+            8080,
+            `Readiness probe tcpSocket port should be 8080, got ${readinessProbe.tcpSocket.port}`
+          );
+          console.log(`    ✓ Readiness probe: tcpSocket port=${readinessProbe.tcpSocket.port}`);
+
+          // Verify liveness probe is tcpSocket type
+          const livenessProbe = container.livenessProbe;
+          test.assert(livenessProbe !== undefined, 'Liveness probe should exist');
+          test.assert(livenessProbe.tcpSocket !== undefined, 'Liveness probe should be tcpSocket type');
+          test.assertEqual(
+            livenessProbe.tcpSocket.port,
+            8080,
+            `Liveness probe tcpSocket port should be 8080, got ${livenessProbe.tcpSocket.port}`
+          );
+          console.log(`    ✓ Liveness probe: tcpSocket port=${livenessProbe.tcpSocket.port}`);
+
+          // Verify probe timing parameters
+          test.assertEqual(readinessProbe.initialDelaySeconds, 3, 'Readiness initialDelaySeconds should be 3');
+          test.assertEqual(readinessProbe.periodSeconds, 5, 'Readiness periodSeconds should be 5');
+          test.assertEqual(livenessProbe.initialDelaySeconds, 5, 'Liveness initialDelaySeconds should be 5');
+          test.assertEqual(livenessProbe.periodSeconds, 10, 'Liveness periodSeconds should be 10');
+          console.log(`    ✓ Probe timing parameters verified`);
+          console.log(`    ✓ Explicit tcpSocket health probes verified successfully`);
+          console.log(`    (Ready=True proves the tcpSocket probes pass at runtime)`);
+        } finally {
+          console.log(`    Cleaning up ${serverName}...`);
+          await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);
+          await sleep(2000);
+        }
+      });
+
+      // ============================================================
+      // CRD Field #8: Container-level security context overrides
+      // ============================================================
+      await test('Container-level security context overrides pod-level values', async () => {
+        const serverName = 'container-security-override';
+        const manifestPath = path.join(manifestsDir, '10-container-security-override.yaml');
+
+        try {
+          console.log(`    Testing container-level security context overrides...`);
+          console.log(`    Pod-level: runAsUser=1000, runAsGroup=3000`);
+          console.log(`    Container-level: runAsUser=2000, runAsGroup=4000`);
+          console.log(`    Container-level should override pod-level.`);
+
+          // Step 1: Deploy MCPServer
+          console.log(`    [1/5] Deploying MCPServer with container-level security overrides...`);
+          await execAsync(`kubectl apply -f ${manifestPath}`);
+
+          // Step 2: Wait for Accepted=True
+          console.log(`    [2/5] Waiting for Accepted=True, Valid...`);
+          await k8s.waitForCondition(serverName, 'Accepted', 'True', 'Valid', namespace, 30);
+          console.log(`    ✓ Accepted: True, Valid`);
+
+          // Step 3: Wait for Ready=True
+          console.log(`    [3/5] Waiting for Ready=True, Available...`);
+          await k8s.waitForCondition(serverName, 'Ready', 'True', 'Available', namespace, 120);
+          console.log(`    ✓ Ready: True, Available`);
+
+          // Step 4: Inspect Deployment for security context configuration
+          console.log(`    [4/5] Inspecting Deployment security contexts...`);
+          const { stdout: deploymentRaw } = await execAsync(
+            `kubectl get deployment ${serverName} -n ${namespace} -o json`
+          );
+          const deployment = JSON.parse(deploymentRaw);
+          const podSpec = deployment.spec.template.spec;
+          const container = podSpec.containers[0];
+
+          // Verify pod-level security context
+          test.assertEqual(podSpec.securityContext?.runAsUser, 1000, 'Pod-level runAsUser should be 1000');
+          test.assertEqual(podSpec.securityContext?.runAsGroup, 3000, 'Pod-level runAsGroup should be 3000');
+          console.log(`    ✓ Pod-level: runAsUser=${podSpec.securityContext?.runAsUser}, runAsGroup=${podSpec.securityContext?.runAsGroup}`);
+
+          // Verify container-level security context overrides
+          test.assertEqual(container.securityContext?.runAsUser, 2000, 'Container-level runAsUser should be 2000');
+          test.assertEqual(container.securityContext?.runAsGroup, 4000, 'Container-level runAsGroup should be 4000');
+          test.assertEqual(container.securityContext?.runAsNonRoot, true, 'Container-level runAsNonRoot should be true');
+          console.log(`    ✓ Container-level: runAsUser=${container.securityContext?.runAsUser}, runAsGroup=${container.securityContext?.runAsGroup}, runAsNonRoot=${container.securityContext?.runAsNonRoot}`);
+
+          // Step 5: Verify actual runtime identity via kubectl exec
+          console.log(`    [5/5] Verifying actual runtime identity via kubectl exec...`);
+          const { stdout: podNameRaw } = await execAsync(
+            `kubectl get pods -n ${namespace} -l mcp-server=${serverName} -o jsonpath='{.items[0].metadata.name}'`
+          );
+          const podName = podNameRaw.trim().replace(/'/g, '');
+          const { stdout: idOutput } = await execAsync(
+            `kubectl exec ${podName} -n ${namespace} -- id`
+          );
+          console.log(`    ✓ Runtime identity: ${idOutput.trim()}`);
+
+          // Parse id output: "uid=2000 gid=4000 groups=4000,3000"
+          const uidMatch = idOutput.match(/uid=(\d+)/);
+          const gidMatch = idOutput.match(/gid=(\d+)/);
+          test.assert(uidMatch !== null, 'Should be able to parse UID from id output');
+          test.assert(gidMatch !== null, 'Should be able to parse GID from id output');
+
+          const actualUid = parseInt(uidMatch![1], 10);
+          const actualGid = parseInt(gidMatch![1], 10);
+
+          test.assertEqual(actualUid, 2000, `Runtime UID should be 2000 (container override), got ${actualUid}`);
+          test.assertEqual(actualGid, 4000, `Runtime GID should be 4000 (container override), got ${actualGid}`);
+
+          console.log(`    ✓ Container-level security overrides verified: UID=${actualUid}, GID=${actualGid}`);
+          console.log(`    ✓ Pod-level values (1000/3000) correctly overridden by container-level (2000/4000)`);
         } finally {
           console.log(`    Cleaning up ${serverName}...`);
           await execAsync(`kubectl delete -f ${manifestPath} --ignore-not-found=true`);

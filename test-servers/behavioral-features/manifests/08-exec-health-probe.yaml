@@ -1,0 +1,46 @@
+---
+# Test Case: Exec health probe type
+# Scenario: MCPServer with exec-based liveness and readiness probes
+# Expected: Operator configures exec probes with the specified command.
+#   The validator server creates /tmp/server-ready on startup,
+#   so "cat /tmp/server-ready" will succeed once the server is running.
+apiVersion: mcp.x-k8s.io/v1alpha1
+kind: MCPServer
+metadata:
+  name: exec-health-probe
+  namespace: default
+spec:
+  source:
+    type: ContainerImage
+    containerImage:
+      ref: localhost/operator-features-validator:local
+  config:
+    port: 8080
+    # EmptyDir at /tmp so the server can write /tmp/server-ready
+    # (the operator sets readOnlyRootFilesystem: true by default)
+    storage:
+      - path: /tmp
+        permissions: ReadWrite
+        source:
+          type: EmptyDir
+          emptyDir: {}
+  runtime:
+    health:
+      readinessProbe:
+        exec:
+          command: ["cat", "/tmp/server-ready"]
+        initialDelaySeconds: 3
+        periodSeconds: 5
+        timeoutSeconds: 2
+        failureThreshold: 3
+      livenessProbe:
+        exec:
+          command: ["cat", "/tmp/server-ready"]
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 3
+    security:
+      podSecurityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
